@@ -164,7 +164,7 @@ mono_w32socket_ioctl (SOCKET sock, gint32 command, gchar *input, gint inputlen, 
 static gboolean
 mono_w32socket_close (SOCKET sock)
 {
-	return CloseHandle (sock);
+	return CloseHandle ((HANDLE)sock);
 }
 
 #endif /* HOST_WIN32 */

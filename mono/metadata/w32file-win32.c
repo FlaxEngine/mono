@@ -56,7 +56,11 @@ mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode
 {
 	gpointer res;
 	MONO_ENTER_GC_SAFE;
-	res = CreateFile (name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	res = CreateFile2 (name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
+#else
+	res = CreateFile(name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
+#endif
 	MONO_EXIT_GC_SAFE;
 	return res;
 }

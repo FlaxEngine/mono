@@ -93,9 +93,14 @@ voidpf ZCALLBACK win32_open_file_func (opaque, filename, mode)
         dwCreationDisposition = CREATE_ALWAYS;
     }
 
-    if ((filename!=NULL) && (dwDesiredAccess != 0))
+	if ((filename!=NULL) && (dwDesiredAccess != 0))
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+		hFile = CreateFile2((LPCTSTR)filename, dwDesiredAccess, dwShareMode, NULL,
+			dwCreationDisposition, dwFlagsAndAttributes, NULL);
+#else
         hFile = CreateFile((LPCTSTR)filename, dwDesiredAccess, dwShareMode, NULL,
                       dwCreationDisposition, dwFlagsAndAttributes, NULL);
+#endif
 
     if (hFile == INVALID_HANDLE_VALUE)
         hFile = NULL;
