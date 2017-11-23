@@ -161,6 +161,11 @@
   <ItemGroup>
     <None Include="..\eglib\src\Makefile.am" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\eglib\src\gmisc-win32-uwp.c" />
+    <ClCompile Include="..\eglib\src\gmodule-win32-uwp.c" />
+    <ClCompile Include="..\eglib\src\gunicode-win32-uwp.c" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

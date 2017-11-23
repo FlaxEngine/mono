@@ -54,7 +54,7 @@
 
 #include "jit-icalls.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <mmsystem.h>
 #endif
 
@@ -73,7 +73,7 @@ typedef struct {
 	handler handler;
 } HandlerItem;
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 /**
 * atexit_wait_keypress:
 *
@@ -228,7 +228,7 @@ mono_runtime_install_custom_handlers_usage (void)
 		 "   --handlers=HANDLERS            Enable handler support, HANDLERS is a comma\n"
 		 "                                  separated list of available handlers to install.\n"
 		 "\n"
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 		 "HANDLERS is composed of:\n"
 		 "    atexit-waitkeypress           Install an atexit handler waiting for a keypress\n"
 		 "                                  before exiting process.\n");
@@ -260,7 +260,7 @@ MONO_SIG_HANDLER_SIGNATURE (mono_chain_signal)
 	return TRUE;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static MMRESULT	g_timer_event = 0;
 static HANDLE g_timer_main_thread = INVALID_HANDLE_VALUE;
 

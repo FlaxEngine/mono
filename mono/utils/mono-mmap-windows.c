@@ -122,7 +122,7 @@ mono_vfree (void *addr, size_t length, MonoMemAccountType type)
 	return 0;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void*
 mono_file_map (size_t length, int flags, int fd, guint64 offset, void **ret_handle)
 {

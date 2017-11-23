@@ -50,7 +50,7 @@ mono_dl_open_file (const char *file, int flags)
 	if (file) {
 		gunichar2* file_utf16 = g_utf8_to_utf16 (file, strlen (file), NULL, NULL, NULL);
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 		guint last_sem = SetErrorMode (SEM_FAILCRITICALERRORS);
 #endif
 		guint32 last_error = 0;
@@ -59,7 +59,7 @@ mono_dl_open_file (const char *file, int flags)
 		if (!hModule)
 			last_error = GetLastError ();
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 		SetErrorMode (last_sem);
 #endif
 

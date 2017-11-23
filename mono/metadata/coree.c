@@ -513,6 +513,8 @@ typedef struct _EXPORT_FIXUP
 	} ProcAddress;
 } EXPORT_FIXUP;
 
+#if !_XBOX_ONE
+
 /* Has to be binary ordered. */
 static const EXPORT_FIXUP ExportFixups[] = {
 	{"CorBindToRuntime", {&CorBindToRuntime}},
@@ -852,6 +854,8 @@ STDAPI MonoFixupExe(HMODULE ModuleHandle)
 	return S_OK;
 }
 
+#endif
+
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void
 mono_coree_set_act_ctx (const char* file_name)
@@ -929,6 +933,7 @@ mono_load_coree (const char* exe_file_name)
 	if (!init_from_coree && exe_file_name)
 		mono_coree_set_act_ctx (exe_file_name);
 
+#if !_XBOX_ONE
 	/* ntdll.dll loads mscoree.dll from the system32 directory. */
 	required_size = GetSystemDirectory (NULL, 0);
 	file_name = g_new (gunichar2, required_size + 12);
@@ -947,13 +952,16 @@ mono_load_coree (const char* exe_file_name)
 	}
 
 	coree_module_handle = module_handle;
+#endif
 }
 
 void
 mono_fixup_exe_image (MonoImage* image)
 {
+#if !_XBOX_ONE
 	if (!init_from_coree && image && image->is_module_handle)
 		MonoFixupExe ((HMODULE) image->raw_data);
+#endif
 }
 
 #endif /* HOST_WIN32 */

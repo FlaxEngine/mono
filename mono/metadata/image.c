@@ -1630,7 +1630,7 @@ mono_image_open_a_lot (const char *fname, MonoImageOpenStatus *status, gboolean 
 	
 	g_return_val_if_fail (fname != NULL, NULL);
 	
-#ifdef HOST_WIN32
+#ifdef HOST_WIN32 && _XBOX_ONE
 	// Win32 path: If we are running with mixed-mode assemblies enabled (ie have loaded mscoree.dll),
 	// then assemblies need to be loaded with LoadLibrary:
 	if (!refonly && coree_module_handle) {

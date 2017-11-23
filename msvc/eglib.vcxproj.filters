@@ -34,4 +34,15 @@
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\eglib\src\gmisc-win32-uwp.c">
+      <Filter>Source Files\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="..\eglib\src\gmodule-win32-uwp.c">
+      <Filter>Source Files\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="..\eglib\src\gunicode-win32-uwp.c">
+      <Filter>Source Files\Win32</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

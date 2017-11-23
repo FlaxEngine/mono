@@ -69,7 +69,7 @@ g_module_open (const gchar *file, GModuleFlags flags)
 	return module;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 gpointer
 w32_find_symbol (const gchar *symbol_name)
 {
@@ -137,7 +137,7 @@ g_module_symbol (GModule *module, const gchar *symbol_name, gpointer *symbol)
 	}
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 const gchar *
 g_module_error (void)
 {

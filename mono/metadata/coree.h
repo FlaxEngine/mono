@@ -24,7 +24,9 @@
 #define STATUS_SUCCESS 0x00000000L
 #define STATUS_INVALID_IMAGE_FORMAT 0xC000007BL
 
+#if !_XBOX_ONE
 STDAPI MonoFixupCorEE(HMODULE ModuleHandle);
+#endif
 
 /* Defined by the linker. */
 #ifndef _MSC_VER

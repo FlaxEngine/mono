@@ -38,6 +38,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\mono\mini\mini-runtime.c" />
+    <ClCompile Include="..\mono\mini\mini-windows-uwp.c" />
     <ClCompile Include="..\mono\mini\mini-windows.c" />
     <ClCompile Include="..\mono\mini\mini-x86.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>

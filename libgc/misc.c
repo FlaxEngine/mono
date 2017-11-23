@@ -902,6 +902,9 @@ out:
   GC_CONST char * buf;
   size_t len;
   {
+#if _XBOX_ONE
+	  return 0;
+#else
       BOOL tmp;
       DWORD written;
       if (len == 0)
@@ -921,6 +924,7 @@ out:
 	  DebugBreak();
       LeaveCriticalSection(&GC_write_cs);
       return tmp ? (int)written : -1;
+#endif
   }
 
 #endif
@@ -1120,7 +1124,7 @@ GC_CONST char * msg;
 	    /* about threads.						*/
 	    for(;;) {}
     }
-#   if defined(MSWIN32) || defined(MSWINCE)
+#   if (defined(MSWIN32) || defined(MSWINCE)) && !_XBOX_ONE
 	DebugBreak();
 #   else
         (void) abort();
