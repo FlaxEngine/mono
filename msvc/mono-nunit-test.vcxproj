@@ -27,7 +27,7 @@
     <ProjectGuid>{0046B994-40A8-4C64-AC9D-429DC9177B54}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>mononunittest</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
