@@ -19,6 +19,11 @@
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && defined(HOST_WIN32)
 
 #include <glib.h>
+#if _XBOX_ONE
+#define _WIN32_WINNT 0x0602
+#include <windows.h>
+#include <MemoryApi.h>
+#endif
 
 #include <mono/metadata/file-mmap.h>
 
@@ -174,7 +179,11 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 	w_mapName = mapName ? mono_string_to_utf16 (mapName) : NULL;
 
 	if (mode == FILE_MODE_CREATE_NEW || handle != INVALID_HANDLE_VALUE) {
-		result = CreateFileMappingW ((HANDLE)handle, NULL, get_page_access (access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
+#if _XBOX_ONE
+		result = CreateFileMappingFromApp((HANDLE)handle, NULL, get_page_access (access) | options, (ULONG64)*capacity, w_mapName);
+#else
+		result = CreateFileMappingW((HANDLE)handle, NULL, get_page_access(access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
+#endif
 		if (result && GetLastError () == ERROR_ALREADY_EXISTS) {
 			CloseHandle (result);
 			result = NULL;
@@ -183,7 +192,11 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 			*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 		}
 	} else if (mode == FILE_MODE_OPEN || mode == FILE_MODE_OPEN_OR_CREATE && access == MMAP_FILE_ACCESS_WRITE) {
+#if _XBOX_ONE
+		result = OpenFileMappingW(get_file_map_access(access), FALSE, w_mapName);
+#else
 		result = OpenFileMappingW (get_file_map_access (access), FALSE, w_mapName);
+#endif
 		if (!result) {
 			if (mode == FILE_MODE_OPEN_OR_CREATE && GetLastError () == ERROR_FILE_NOT_FOUND) {
 				*error = INVALID_FILE_MODE;
@@ -209,14 +222,22 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 		guint32 waitSleep = 0;
 
 		while (waitRetries > 0) {
-			result = CreateFileMappingW ((HANDLE)handle, NULL, get_page_access (access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
+#if _XBOX_ONE
+			result = CreateFileMappingFromApp((HANDLE)handle, NULL, get_page_access (access) | options, (ULONG64)*capacity, w_mapName);
+#else
+			result = CreateFileMappingW((HANDLE)handle, NULL, get_page_access(access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
+#endif
 			if (result)
 				break;
 			if (GetLastError() != ERROR_ACCESS_DENIED) {
 				*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 				break;
 			}
-			result = OpenFileMappingW (get_file_map_access (access), FALSE, w_mapName);
+#if _XBOX_ONE
+			result = OpenFileMappingW(get_file_map_access (access), FALSE, w_mapName);
+#else
+			result = OpenFileMappingW(get_file_map_access(access), FALSE, w_mapName);
+#endif
 			if (result)
 				break;
 			if (GetLastError () != ERROR_FILE_NOT_FOUND) {
@@ -237,7 +258,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 			*error = COULD_NOT_OPEN;
 		}
 	}
-
+	 
 	if (w_mapName)
 		g_free (w_mapName);
 	return result;
@@ -361,7 +382,11 @@ int mono_mmap_map (void *handle, gint64 offset, gint64 *size, int access, void *
 		return CAPACITY_LARGER_THAN_LOGICAL_ADDRESS_SPACE;
 #endif
 	
+#if _XBOX_ONE
+	void *address = MapViewOfFileFromApp((HANDLE) handle, get_file_map_access (access), (ULONG64)newOffset, (SIZE_T) nativeSize);
+#else
 	void *address = MapViewOfFile ((HANDLE) handle, get_file_map_access (access), (DWORD) (newOffset >> 32), (DWORD) newOffset, (SIZE_T) nativeSize);
+#endif
 	if (!address)
 		return convert_win32_error (GetLastError (), COULD_NOT_MAP_MEMORY);
 

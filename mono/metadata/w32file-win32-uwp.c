@@ -64,10 +64,12 @@ gboolean
 mono_w32file_lock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
 {
 	gboolean result = FALSE;
+	OVERLAPPED overlapped = { 0 };
+	overlapped.Offset = position & 0xFFFFFFFF;
+	overlapped.OffsetHigh = position >> 32;
 	MONO_ENTER_GC_SAFE;
 
-	result = LockFile (handle, position & 0xFFFFFFFF, position >> 32,
-			   length & 0xFFFFFFFF, length >> 32);
+	result = LockFileEx(handle, 0, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
 
 	if (result == FALSE) {
 		*error = GetLastError ();
@@ -81,10 +83,12 @@ gboolean
 mono_w32file_unlock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
 {
 	gboolean result = FALSE;
+	OVERLAPPED overlapped = { 0 };
+	overlapped.Offset = position & 0xFFFFFFFF;
+	overlapped.OffsetHigh = position >> 32;
 	MONO_ENTER_GC_SAFE;
 
-	result = UnlockFile (handle, position & 0xFFFFFFFF, position >> 32,
-			     length & 0xFFFFFFFF, length >> 32);
+	result = UnlockFileEx(handle, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
 
 	if (result == FALSE) {
 		*error = GetLastError ();

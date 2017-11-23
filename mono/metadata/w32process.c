@@ -54,13 +54,13 @@ mono_w32process_module_get_information (gpointer process, gpointer module, MODUL
 static guint32
 mono_w32process_get_fileversion_info_size (gunichar2 *filename, guint32 *handle)
 {
-	return GetFileVersionInfoSize (filename, handle);
+	return GetFileVersionInfoSizeExW(0, filename, handle);
 }
 
 static gboolean
 mono_w32process_get_fileversion_info (gunichar2 *filename, guint32 handle, guint32 len, gpointer data)
 {
-	return GetFileVersionInfo (filename, handle, len, data);
+	return GetFileVersionInfoExW(0, filename, handle, len, data);
 }
 
 static gboolean

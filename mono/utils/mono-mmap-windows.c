@@ -13,7 +13,13 @@
 #include <glib.h>
 
 #if defined(HOST_WIN32)
+#if _XBOX_ONE
+#define _WIN32_WINNT 0x0602
 #include <windows.h>
+#include <MemoryApi.h>
+#else
+#include <windows.h>
+#endif
 #include "mono/utils/mono-mmap-windows-internals.h"
 #include <mono/utils/mono-counters.h>
 #include <io.h>
@@ -183,7 +189,11 @@ mono_mprotect (void *addr, size_t length, int flags)
 		VirtualAlloc (addr, length, MEM_COMMIT, prot);
 		return 0;
 	}
+#if _XBOX_ONE
+	return VirtualProtectFromApp(addr, length, prot, &oldprot) == 0;
+#else
 	return VirtualProtect (addr, length, prot, &oldprot) == 0;
+#endif
 }
 
 void*

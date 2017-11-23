@@ -304,7 +304,7 @@ void GC_print_callers GC_PROTO((struct callinfo info[NFRAMES]));
 #   include <windows.h>
 #   include <winbase.h>
 #   define CLOCK_TYPE DWORD
-#   define GET_TIME(x) x = GetTickCount()
+#   define GET_TIME(x) x = GetTickCount64()
 #   define MS_TIME_DIFF(a,b) ((long)((a)-(b)))
 # else /* !MSWIN32, !MSWINCE, !BSD_TIME */
 #   include <time.h>

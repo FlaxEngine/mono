@@ -126,12 +126,14 @@ mono_threads_suspend_begin_async_resume (MonoThreadInfo *info)
 
 		mono_monoctx_to_sigctx (&ctx, &context);
 
+#if !_XBOX_ONE
 		context.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
 		res = SetThreadContext (handle, &context);
 		if (!res) {
 			CloseHandle (handle);
 			return FALSE;
 		}
+#endif
 	}
 
 	result = ResumeThread (handle);
