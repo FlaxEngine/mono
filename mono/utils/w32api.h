@@ -51,9 +51,7 @@ typedef struct pollfd {
 } WSAPOLLFD, *PWSAPOLLFD, *LPWSAPOLLFD;
 #endif
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 #include <mswsock.h>
-#endif
 
 #endif /* HOST_WIN32 */
 

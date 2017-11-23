@@ -26,8 +26,15 @@
     <ClCompile Include="..\mono\metadata\class-accessors.c" />
     <ClCompile Include="..\mono\metadata\class.c" />
     <ClCompile Include="..\mono\metadata\cominterop.c" />
+    <ClCompile Include="..\mono\metadata\console-win32-uwp.c" />
     <ClCompile Include="..\mono\metadata\console-win32.c" />
+    <ClCompile Include="..\mono\metadata\coree-windows-uwp.c" />
+    <ClCompile Include="..\mono\metadata\icall-windows-uwp.c" />
+    <ClCompile Include="..\mono\metadata\marshal-windows-uwp.c" />
+    <ClCompile Include="..\mono\metadata\mono-security-windows-uwp.c" />
     <ClCompile Include="..\mono\metadata\property-bag.c" />
+    <ClCompile Include="..\mono\metadata\w32file-win32-uwp.c" />
+    <ClCompile Include="..\mono\metadata\w32process-win32-uwp.c" />
     <ClCompile Include="..\mono\metadata\w32socket-win32.c" />
     <ClCompile Include="..\mono\metadata\w32file-win32.c" />
     <ClCompile Include="..\mono\metadata\w32error-win32.c" />
@@ -109,6 +116,7 @@
     <ClCompile Include="..\mono\metadata\sysmath.c" />
     <ClCompile Include="..\mono\metadata\threads.c" />
     <ClCompile Include="..\mono\metadata\verify.c" />
+    <ClCompile Include="w32file-win32-uwp2.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\mono\metadata\appdomain.h" />

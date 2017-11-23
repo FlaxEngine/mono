@@ -9,9 +9,11 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/utils/mono-rand-windows-internals.h"
+
+#pragma comment(lib, "Bcrypt.lib")
 
 MONO_WIN32_CRYPT_PROVIDER_HANDLE
 mono_rand_win_open_provider (void)

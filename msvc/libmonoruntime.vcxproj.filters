@@ -271,6 +271,30 @@
     <ClCompile Include="..\mono\metadata\property-bag.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\mono\metadata\console-win32-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\icall-windows-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\marshal-windows-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\mono-security-windows-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\w32file-win32-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\w32process-win32-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="w32file-win32-uwp2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mono\metadata\coree-windows-uwp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\mono\metadata\appdomain.h">
@@ -573,6 +597,7 @@
     <ClInclude Include="..\mono\metadata\cominterop-win32-internals.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\mono\metadata\appdomain-icalls.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">

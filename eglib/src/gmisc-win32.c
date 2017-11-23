@@ -127,7 +127,7 @@ g_path_is_absolute (const char *filename)
 	return FALSE;
 }
 
-#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static gchar*
 g_get_known_folder_path (void)
 {

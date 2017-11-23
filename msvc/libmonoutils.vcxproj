@@ -53,6 +53,7 @@
     <ClCompile Include="..\mono\utils\mono-conc-hashtable.c" />
     <ClCompile Include="..\mono\utils\mono-context.c" />
     <ClCompile Include="..\mono\utils\mono-counters.c" />
+    <ClCompile Include="..\mono\utils\mono-dl-windows-uwp.c" />
     <ClCompile Include="..\mono\utils\mono-dl-windows.c" />
     <ClCompile Include="..\mono\utils\mono-dl.c" />
     <ClCompile Include="..\mono\utils\mono-error.c" />
@@ -65,10 +66,13 @@
     <ClCompile Include="..\mono\utils\mono-log-common.c" />
     <ClCompile Include="..\mono\utils\mono-math.c" />
     <ClCompile Include="..\mono\utils\mono-md5.c" />
+    <ClCompile Include="..\mono\utils\mono-mmap-windows-uwp.c" />
     <ClCompile Include="..\mono\utils\mono-mmap-windows.c" />
     <ClCompile Include="..\mono\utils\mono-mmap.c" />
     <ClCompile Include="..\mono\utils\mono-networkinterfaces.c" />
+    <ClCompile Include="..\mono\utils\mono-proclib-windows-uwp.c" />
     <ClCompile Include="..\mono\utils\mono-proclib-windows.c" />
+    <ClCompile Include="..\mono\utils\mono-rand-windows-uwp.c" />
     <ClCompile Include="..\mono\utils\mono-rand-windows.c" />
     <ClCompile Include="..\mono\utils\mono-rand.c" />
     <ClCompile Include="..\mono\utils\mono-threads-state-machine.c" />

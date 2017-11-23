@@ -31,7 +31,7 @@
 #include "coree.h"
 #include "coree-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <shellapi.h>
 #endif
 
@@ -72,7 +72,7 @@ mono_get_module_file_name (HMODULE module_handle)
 }
 
 /* Entry point called by LdrLoadDll of ntdll.dll after _CorValidateImage. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 BOOL STDMETHODCALLTYPE _CorDllMain(HINSTANCE hInst, DWORD dwReason, LPVOID lpReserved)
 {
 	MonoAssembly* assembly;
@@ -142,7 +142,7 @@ BOOL STDMETHODCALLTYPE _CorDllMain(HINSTANCE hInst, DWORD dwReason, LPVOID lpRes
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 /* Called by ntdll.dll reagardless of entry point after _CorValidateImage. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 __int32 STDMETHODCALLTYPE _CorExeMain(void)
 {
 	MonoError error;
@@ -227,11 +227,15 @@ void STDMETHODCALLTYPE CorExitProcess(int exitCode)
 		mono_runtime_quit ();
 	}
 #endif
+#if _XBOX_ONE
+	TerminateProcess (GetCurrentProcess(), exitCode);
+#else
 	ExitProcess (exitCode);
+#endif
 }
 
 /* Called by ntdll.dll before _CorDllMain and _CorExeMain. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 STDAPI _CorValidateImage(PVOID *ImageBase, LPCWSTR FileName)
 {
 	IMAGE_DOS_HEADER* DosHeader;
@@ -416,7 +420,7 @@ STDAPI CorBindToRuntime(LPCWSTR pwszVersion, LPCWSTR pwszBuildFlavor, REFCLSID r
 	return CorBindToRuntimeEx (pwszVersion, pwszBuildFlavor, 0, rclsid, riid, ppv);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 HMODULE WINAPI MonoLoadImage(LPCWSTR FileName)
 {
 	HANDLE FileHandle;
@@ -848,7 +852,7 @@ STDAPI MonoFixupExe(HMODULE ModuleHandle)
 	return S_OK;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void
 mono_coree_set_act_ctx (const char* file_name)
 {

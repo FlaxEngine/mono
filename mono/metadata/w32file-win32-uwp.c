@@ -9,7 +9,7 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/metadata/w32file-win32-internals.h"
 
@@ -36,26 +36,6 @@ mono_w32file_replace (gunichar2 *destinationFileName, gunichar2 *sourceFileName,
 	MONO_ENTER_GC_SAFE;
 
 	result = ReplaceFile (destinationFileName, sourceFileName, destinationBackupFileName, flags, NULL, NULL);
-	if (result == FALSE) {
-		*error=GetLastError ();
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return result;
-}
-
-gboolean
-mono_w32file_copy (gunichar2 *path, gunichar2 *dest, gboolean overwrite, gint32 *error)
-{
-	gboolean						result = FALSE;
-	COPYFILE2_EXTENDED_PARAMETERS	copy_param = {0};
-
-	copy_param.dwSize = sizeof (COPYFILE2_EXTENDED_PARAMETERS);
-	copy_param.dwCopyFlags = (!overwrite) ? COPY_FILE_FAIL_IF_EXISTS : 0;
-
-	MONO_ENTER_GC_SAFE;
-
-	result = SUCCEEDED (CopyFile2 (path, dest, &copy_param));
 	if (result == FALSE) {
 		*error=GetLastError ();
 	}
@@ -158,6 +138,22 @@ mono_w32file_get_console_error (void)
 	mono_error_set_pending_exception (&mono_error);
 
 	SetLastError (ERROR_NOT_SUPPORTED);
+
+	return INVALID_HANDLE_VALUE;
+}
+
+gint32
+mono_w32file_get_logical_drive(guint32 len, gunichar2 *buf)
+{
+	MonoError mono_error;
+	error_init(&mono_error);
+
+	g_unsupported_api("GetLogicalDriveStrings (len, buf)");
+
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetLogicalDriveStrings (len, buf)");
+	mono_error_set_pending_exception(&mono_error);
+
+	SetLastError(ERROR_NOT_SUPPORTED);
 
 	return INVALID_HANDLE_VALUE;
 }
