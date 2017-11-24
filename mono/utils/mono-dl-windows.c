@@ -46,6 +46,11 @@ mono_dl_get_so_suffixes (void)
 void*
 mono_dl_open_file (const char *file, int flags)
 {
+#if _XBOX_ONE
+	g_unsupported_api("mono_dl_open_file");
+	SetLastError(ERROR_NOT_SUPPORTED);
+	return NULL;
+#else
 	gpointer hModule = NULL;
 	if (file) {
 		gunichar2* file_utf16 = g_utf8_to_utf16 (file, strlen (file), NULL, NULL, NULL);
@@ -71,6 +76,7 @@ mono_dl_open_file (const char *file, int flags)
 		hModule = GetModuleHandle (NULL);
 	}
 	return hModule;
+#endif
 }
 
 void

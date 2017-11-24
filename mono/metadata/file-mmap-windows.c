@@ -16,13 +16,13 @@
 #include <config.h>
 #include <glib.h>
 #include <mono/utils/mono-compiler.h>
+
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && defined(HOST_WIN32)
 
-#include <glib.h>
 #if _XBOX_ONE
-#define _WIN32_WINNT 0x0602
 #include <windows.h>
 #include <MemoryApi.h>
+#pragma comment(lib, "Kernel32.lib")
 #endif
 
 #include <mono/metadata/file-mmap.h>
@@ -281,7 +281,15 @@ void *mono_mmap_open_file (MonoString *path, int mode, MonoString *mapName, gint
 			*error = CAPACITY_SMALLER_THAN_FILE_SIZE;
 			goto done;
 		}
-		hFile = CreateFileW (w_path, get_file_access (access), FILE_SHARE_READ, NULL, mode, FILE_ATTRIBUTE_NORMAL, NULL);
+#if _XBOX_ONE
+		CREATEFILE2_EXTENDED_PARAMETERS param = { 0 };
+		param.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+		param.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+		param.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+		hFile = CreateFile2 (w_path, get_file_access (access), FILE_SHARE_READ, mode, &param);
+#else
+		hFile = CreateFileW(w_path, get_file_access(access), FILE_SHARE_READ, NULL, mode, FILE_ATTRIBUTE_NORMAL, NULL);
+#endif
 		if (hFile == INVALID_HANDLE_VALUE) {
 			*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 			goto done;
@@ -318,9 +326,13 @@ void mono_mmap_close (void *mmap_handle)
 void mono_mmap_configure_inheritability (void *mmap_handle, gboolean inheritability)
 {
 	g_assert (mmap_handle);
+#if _XBOX_ONE
+	g_unsupported_api("SetHandleInformation");
+#else
 	if (!SetHandleInformation ((HANDLE) mmap_handle, HANDLE_FLAG_INHERIT, inheritability ? HANDLE_FLAG_INHERIT : 0)) {
 		g_error ("mono_mmap_configure_inheritability: SetHandleInformation failed with error %d!", GetLastError ());
 	}
+#endif
 }
 
 void mono_mmap_flush (void *mmap_handle)
@@ -406,7 +418,11 @@ int mono_mmap_map (void *handle, gint64 offset, gint64 *size, int access, void *
 	// and size of the region of pages with matching attributes starting from base address.
 	// VirtualQueryEx: http://msdn.microsoft.com/en-us/library/windows/desktop/aa366907(v=vs.85).aspx
 	if (((viewInfo.State & MEM_RESERVE) != 0) || viewSize < (guint64) nativeSize) {
-		void *tempAddress = VirtualAlloc (address, nativeSize != 0 ? nativeSize : viewSize, MEM_COMMIT, get_page_access (access));
+#if _XBOX_ONE
+		void *tempAddress = VirtualAllocFromApp(address, nativeSize != 0 ? nativeSize : viewSize, MEM_COMMIT, get_page_access (access));
+#else
+		void *tempAddress = VirtualAlloc(address, nativeSize != 0 ? nativeSize : viewSize, MEM_COMMIT, get_page_access(access));
+#endif
 		if (!tempAddress) {
 			return convert_win32_error (GetLastError (), COULD_NOT_MAP_MEMORY);
 		}
