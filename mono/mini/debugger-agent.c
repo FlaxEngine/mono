@@ -6927,9 +6927,35 @@ type_comes_from_assembly (gpointer klass, gpointer also_klass, gpointer assembly
 }
 
 /*
+ * file_comes_from_assembly:
+ *
+ *   GHRFunc that returns TRUE if file is used by one or more classes from the given assembly
+ */
+static gboolean
+file_comes_from_assembly (gpointer key, gpointer value, gpointer assembly)
+{
+	GHashTableIter iter;
+	MonoClass* klass;
+	char* path = (char*)key;
+	GSList* class_list = (GSList*)value, *l;
+	MonoImage* image = mono_assembly_get_image((MonoAssembly*)assembly);
+
+	// Find any class from the given assembly
+	for (l = class_list; l; l = l->next) {
+		klass = (MonoClass*)l->data;
+		if (klass && mono_class_get_image(klass) == image) {
+			g_slist_free(class_list);
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+/*
  * clear_types_for_assembly:
  *
- *   Clears types from loaded_classes for a given assembly
+ *   Clears types from loaded_classes, source_file_to_class and source_file_to_class_ignorecase for a given assembly
  */
 static void
 clear_types_for_assembly (MonoAssembly *assembly)
@@ -6945,6 +6971,8 @@ clear_types_for_assembly (MonoAssembly *assembly)
 
 	mono_loader_lock ();
 	g_hash_table_foreach_remove (info->loaded_classes, type_comes_from_assembly, assembly);
+	g_hash_table_foreach_remove (info->source_file_to_class, file_comes_from_assembly, assembly);
+	g_hash_table_foreach_remove (info->source_file_to_class_ignorecase, file_comes_from_assembly, assembly);
 	mono_loader_unlock ();
 }
 
