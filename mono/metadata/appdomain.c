@@ -102,6 +102,9 @@ static void
 mono_domain_fire_assembly_load (MonoAssembly *assembly, gpointer user_data);
 
 static void
+mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data);
+
+static void
 add_assemblies_to_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *hash);
 
 static MonoAppDomainHandle
@@ -278,6 +281,7 @@ mono_runtime_init_checked (MonoDomain *domain, MonoThreadStartCB start_cb, MonoT
 	mono_install_assembly_postload_search_hook ((MonoAssemblySearchFunc)mono_domain_assembly_postload_search, GUINT_TO_POINTER (FALSE));
 	mono_install_assembly_postload_refonly_search_hook ((MonoAssemblySearchFunc)mono_domain_assembly_postload_search, GUINT_TO_POINTER (TRUE));
 	mono_install_assembly_load_hook (mono_domain_fire_assembly_load, NULL);
+	mono_install_assembly_unload_hook(mono_domain_fire_assembly_unload, NULL);
 
 	mono_thread_init (start_cb, attach_cb);
 
@@ -1250,6 +1254,49 @@ add_assemblies_to_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *ht)
 		g_hash_table_destroy (ht);
 }
 
+/*
+* LOCKING: assumes assemblies_lock in the domain is already locked.
+*/
+static void
+remove_assemblies_from_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *ht)
+{
+	gint i;
+	GSList *tmp;
+	gboolean destroy_ht = FALSE;
+
+	if (!ass->aname.name)
+		return;
+
+	if (!ht) {
+		ht = g_hash_table_new(mono_aligned_addr_hash, NULL);
+		destroy_ht = TRUE;
+		for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
+			g_hash_table_insert(ht, tmp->data, tmp->data);
+		}
+	}
+
+	if (g_hash_table_lookup(ht, ass)) {
+		//mono_assembly_close(ass); // FIXME: call this for reference assemblies?
+		g_hash_table_remove(ht, ass);
+		domain->domain_assemblies = g_slist_remove(domain->domain_assemblies, ass);
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Assembly %s[%p] removed from domain %s, ref_count=%d", ass->aname.name, ass, domain->friendly_name, ass->ref_count);
+	}
+
+	// TODO: handle references?
+	/*if (ass->image->references) {
+		for (i = 0; i < ass->image->nreferences; i++) {
+			if (ass->image->references[i] && ass->image->references[i] != REFERENCE_MISSING) {
+				if (g_hash_table_lookup(ht, ass->image->references[i])) {
+					remove_assemblies_from_domain(domain, ass->image->references[i], ht);
+				}
+			}
+		}
+	}*/
+
+	if (destroy_ht)
+		g_hash_table_destroy(ht);
+}
+
 static void
 mono_domain_fire_assembly_load (MonoAssembly *assembly, gpointer user_data)
 {
@@ -1299,6 +1346,27 @@ mono_domain_fire_assembly_load (MonoAssembly *assembly, gpointer user_data)
 	mono_error_cleanup (&error);
 leave:
 	HANDLE_FUNCTION_RETURN ();
+}
+
+static void
+mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
+{
+	HANDLE_FUNCTION_ENTER();
+	MonoDomain *domain = mono_domain_get();
+
+	if (!domain->domain)
+		/* This can happen during startup */
+		goto leave;
+#ifdef ASSEMBLY_LOAD_DEBUG
+	fprintf(stderr, "Unloading %s from domain %s\n", assembly->aname.name, domain->friendly_name);
+#endif
+
+	mono_domain_assemblies_lock(domain);
+	remove_assemblies_from_domain(domain, assembly, NULL);
+	mono_domain_assemblies_unlock(domain);
+
+leave:
+	HANDLE_FUNCTION_RETURN();
 }
 
 /*
