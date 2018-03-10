@@ -1504,6 +1504,56 @@ free_assembly_load_hooks (void)
 	}
 }
 
+typedef struct AssemblyUnloadHook AssemblyUnloadHook;
+struct AssemblyUnloadHook {
+	AssemblyUnloadHook *next;
+	MonoAssemblyUnloadFunc func;
+	gpointer user_data;
+};
+
+AssemblyUnloadHook *assembly_unload_hook = NULL;
+
+/**
+* mono_assembly_invoke_unload_hook:
+*/
+void
+mono_assembly_invoke_unload_hook(MonoAssembly *ass)
+{
+	AssemblyUnloadHook *hook;
+
+	for (hook = assembly_unload_hook; hook; hook = hook->next) {
+		hook->func(ass, hook->user_data);
+	}
+}
+
+/**
+* mono_install_assembly_unload_hook:
+*/
+void
+mono_install_assembly_unload_hook(MonoAssemblyUnloadFunc func, gpointer user_data)
+{
+	AssemblyUnloadHook *hook;
+
+	g_return_if_fail(func != NULL);
+
+	hook = g_new0(AssemblyUnloadHook, 1);
+	hook->func = func;
+	hook->user_data = user_data;
+	hook->next = assembly_unload_hook;
+	assembly_unload_hook = hook;
+}
+
+static void
+free_assembly_unload_hooks(void)
+{
+	AssemblyUnloadHook *hook, *next;
+
+	for (hook = assembly_unload_hook; hook; hook = next) {
+		next = hook->next;
+		g_free(hook);
+	}
+}
+
 typedef struct AssemblySearchHook AssemblySearchHook;
 struct AssemblySearchHook {
 	AssemblySearchHook *next;
@@ -3800,6 +3850,8 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 
 	mono_profiler_assembly_event (assembly, MONO_PROFILE_START_UNLOAD);
 
+	mono_assembly_invoke_unload_hook (assembly);
+
 	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading assembly %s [%p].", assembly->aname.name, assembly);
 
 	mono_debug_close_image (assembly->image);
@@ -3926,6 +3978,7 @@ mono_assemblies_cleanup (void)
 	g_slist_free (loaded_assembly_bindings);
 
 	free_assembly_load_hooks ();
+	free_assembly_unload_hooks();
 	free_assembly_search_hooks ();
 	free_assembly_preload_hooks ();
 }
