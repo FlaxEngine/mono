@@ -79,10 +79,14 @@ static MonoType* mono_type_array_get_and_resolve_raw (MonoArray* array, int idx,
 
 static gboolean mono_image_module_basic_init (MonoReflectionModuleBuilderHandle module, MonoError *error);
 
+static void mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data);
+
 void
 mono_reflection_emit_init (void)
 {
 	mono_dynamic_images_init ();
+
+	mono_install_assembly_unload_hook(mono_domain_fire_assembly_unload, NULL);
 }
 
 char*
@@ -3864,6 +3868,31 @@ free_dynamic_method (void *dynamic_method)
 
 	mono_runtime_free_method (domain, method);
 	g_free (data);
+}
+
+static gboolean
+is_dynamic_method_from_assembly(MonoObject* obj, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoReflectionDynamicMethod* mb = (MonoReflectionDynamicMethod*)obj;
+	return mb->module->image == mono_assembly_get_image(assembly);
+}
+
+static void
+mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
+{
+	HANDLE_FUNCTION_ENTER();
+	MonoDomain *domain = mono_domain_get();
+
+	if (!domain->domain)
+		goto leave;
+
+	mono_loader_lock();
+	mono_gc_reference_queue_foreach_remove(dynamic_method_queue, is_dynamic_method_from_assembly, assembly);
+	mono_loader_unlock();
+
+leave:
+	HANDLE_FUNCTION_RETURN();
 }
 
 static gboolean
