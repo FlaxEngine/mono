@@ -392,11 +392,12 @@ MONO_API void         mono_gchandle_free        (uint32_t gchandle);
 
 typedef void (*mono_reference_queue_callback) (void *user_data);
 typedef struct _MonoReferenceQueue MonoReferenceQueue;
+typedef mono_bool (*mono_reference_queue_remove_check) (MonoObject* obj, void *user_data);
 
 MONO_API MonoReferenceQueue* mono_gc_reference_queue_new (mono_reference_queue_callback callback);
 MONO_API void mono_gc_reference_queue_free (MonoReferenceQueue *queue);
 MONO_API mono_bool mono_gc_reference_queue_add (MonoReferenceQueue *queue, MonoObject *obj, void *user_data);
-
+MONO_API mono_bool mono_gc_reference_queue_foreach_remove(MonoReferenceQueue *queue, mono_reference_queue_remove_check func, void *user_data);
 
 
 /* GC write barriers support */
