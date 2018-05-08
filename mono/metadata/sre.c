@@ -3843,6 +3843,7 @@ failure_unlocked:
 
 typedef struct {
 	MonoMethod *handle;
+	MonoAssembly *assembly;
 	MonoDomain *domain;
 } DynamicMethodReleaseData;
 
@@ -3856,25 +3857,33 @@ free_dynamic_method (void *dynamic_method)
 {
 	DynamicMethodReleaseData *data = (DynamicMethodReleaseData *)dynamic_method;
 	MonoDomain *domain = data->domain;
+	MonoAssembly *assembly = data->assembly;
 	MonoMethod *method = data->handle;
 	guint32 dis_link;
+	gboolean has_image;
 
 	mono_domain_lock (domain);
 	dis_link = (guint32)(size_t)g_hash_table_lookup (domain->method_to_dyn_method, method);
 	g_hash_table_remove (domain->method_to_dyn_method, method);
+	has_image = g_slist_index(domain->domain_assemblies, assembly) != -1;
 	mono_domain_unlock (domain);
 	g_assert (dis_link);
 	mono_gchandle_free (dis_link);
 
-	mono_runtime_free_method (domain, method);
+	// Prevent release if the owning assembly has been already unloaded
+	if(has_image)
+		mono_runtime_free_method (domain, method);
 	g_free (data);
 }
 
 static gboolean
-is_dynamic_method_from_assembly(MonoObject* obj, gpointer user_data)
+is_dynamic_method_from_assembly(MonoObject* obj, gpointer queue_user_data, gpointer user_data)
 {
 	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	DynamicMethodReleaseData *release_data = (DynamicMethodReleaseData*)queue_user_data;
 	MonoReflectionDynamicMethod* mb = (MonoReflectionDynamicMethod*)obj;
+	if(mb == 0)
+		return release_data->assembly == assembly;
 	return mb->module->image == mono_assembly_get_image(assembly);
 }
 
@@ -3888,7 +3897,8 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		goto leave;
 
 	mono_loader_lock();
-	mono_gc_reference_queue_foreach_remove(dynamic_method_queue, is_dynamic_method_from_assembly, assembly);
+	if(dynamic_method_queue)
+		mono_gc_reference_queue_foreach_remove2(dynamic_method_queue, is_dynamic_method_from_assembly, assembly);
 	mono_loader_unlock();
 
 leave:
@@ -4000,6 +4010,7 @@ reflection_create_dynamic_method (MonoReflectionDynamicMethodHandle ref_mb, Mono
 
 	release_data = g_new (DynamicMethodReleaseData, 1);
 	release_data->handle = handle;
+	release_data->assembly = klass->image->assembly;
 	release_data->domain = mono_object_get_domain ((MonoObject*)mb);
 	if (!mono_gc_reference_queue_add (queue, (MonoObject*)mb, release_data))
 		g_free (release_data);
