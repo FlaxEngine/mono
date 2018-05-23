@@ -23,6 +23,7 @@ namespace CppSharp
 
         static List<string> Abis = new List<string> ();
         static string OutputDir;
+        static string OutputFile;
 
         static string MonodroidDir = @"";
         static string AndroidNdkPath = @"";
@@ -126,7 +127,7 @@ namespace CppSharp
                 });*/
 
             foreach (var target in AndroidTargets)
-                target.Defines.AddRange (new string[] { "PLATFORM_ANDROID",
+                target.Defines.AddRange (new string[] { "HOST_ANDROID",
                     "TARGET_ANDROID", "MONO_CROSS_COMPILE", "USE_MONO_CTX"
                 });
         }
@@ -148,7 +149,7 @@ namespace CppSharp
             });
 
             foreach (var target in iOSTargets) {
-                target.Defines.AddRange (new string[] { "PLATFORM_DARWIN",
+                target.Defines.AddRange (new string[] { "HOST_DARWIN",
                     "TARGET_IOS", "TARGET_MACH", "MONO_CROSS_COMPILE", "USE_MONO_CTX",
                     "_XOPEN_SOURCE"
                 });
@@ -162,7 +163,7 @@ namespace CppSharp
             });
 
             foreach (var target in DarwinTargets) {
-                target.Defines.AddRange (new string[] { "PLATFORM_DARWIN",
+                target.Defines.AddRange (new string[] { "HOST_DARWIN",
                     "TARGET_IOS", "TARGET_MACH", "MONO_CROSS_COMPILE", "USE_MONO_CTX",
                     "_XOPEN_SOURCE"
                 });
@@ -271,6 +272,7 @@ namespace CppSharp
             var options = new Mono.Options.OptionSet () {
                 { "abi=", "ABI triple to generate", v => Abis.Add(v) },
                 { "o|out=", "output directory", v => OutputDir = v },
+                { "outfile=", "output directory", v => OutputFile = v },
                 { "maccore=", "include directory", v => MaccoreDir = v },
                 { "monodroid=", "top monodroid directory", v => MonodroidDir = v },
                 { "android-ndk=", "Path to Android NDK", v => AndroidNdkPath = v },
@@ -341,10 +343,14 @@ namespace CppSharp
                 break;
             case TargetPlatform.WatchOS:
             case TargetPlatform.iOS: {
-                string targetPath = Path.Combine (MaccoreDir, "builds");
-                if (!Directory.Exists (MonoDir))
-                    MonoDir = Path.GetFullPath (Path.Combine (targetPath, "../../mono"));
-                targetBuild = Path.Combine(targetPath, target.Build);
+                if (!string.IsNullOrEmpty (TargetDir)) {
+                    targetBuild = TargetDir;
+                } else {
+                    string targetPath = Path.Combine (MaccoreDir, "builds");
+                    if (!Directory.Exists (MonoDir))
+                        MonoDir = Path.GetFullPath (Path.Combine (targetPath, "../../mono"));
+                    targetBuild = Path.Combine(targetPath, target.Build);
+                }
                 break;
             }
             default:
@@ -357,11 +363,11 @@ namespace CppSharp
             var includeDirs = new[]
             {
                 targetBuild,
-                Path.Combine(targetBuild, "eglib", "src"),
+                Path.Combine(targetBuild, "mono", "eglib"),
                 MonoDir,
                 Path.Combine(MonoDir, "mono"),
                 Path.Combine(MonoDir, "mono", "mini"),
-                Path.Combine(MonoDir, "eglib", "src")
+                Path.Combine(MonoDir, "mono", "eglib")
             };
 
             foreach (var inc in includeDirs)
@@ -646,12 +652,18 @@ namespace CppSharp
 
         static void Dump(ASTContext ctx, ParserTargetInfo targetInfo, Target target)
         {
-            var targetFile = target.Triple;
+			string targetFile;
 
-            if (!string.IsNullOrEmpty (OutputDir))
-                targetFile = Path.Combine (OutputDir, targetFile);
+			if (!string.IsNullOrEmpty (OutputFile)) {
+				targetFile = OutputFile;
+			} else {
+				targetFile = target.Triple;
 
-            targetFile += ".h";
+				if (!string.IsNullOrEmpty (OutputDir))
+					targetFile = Path.Combine (OutputDir, targetFile);
+
+				targetFile += ".h";
+			}
 
             using (var writer = new StreamWriter(targetFile))
             //using (var writer = Console.Out)
@@ -783,7 +795,8 @@ namespace CppSharp
                 "MonoTypedRef",
                 "MonoThreadsSync",
                 "SgenThreadInfo",
-                "SgenClientThreadInfo"
+                "SgenClientThreadInfo",
+                "MonoProfilerCallContext"
             };
 
             DumpClasses(writer, ctx, types);
@@ -813,7 +826,8 @@ namespace CppSharp
                 "SeqPointInfo",
                 "DynCallArgs", 
                 "MonoLMFTramp",
-                "InterpMethodArguments",
+                "CallContext",
+                "MonoFtnDesc"
             };
 
             DumpClasses(writer, ctx, optionalTypes, optional: true);

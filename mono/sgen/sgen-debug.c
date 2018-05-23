@@ -502,9 +502,9 @@ find_pinning_ref_from_thread (char *obj, size_t size)
 		char **start = (char**)info->client_info.stack_start;
 		if (info->client_info.skip || info->client_info.gc_disabled)
 			continue;
-		while (start < (char**)info->client_info.stack_end) {
+		while (start < (char**)info->client_info.info.stack_end) {
 			if (*start >= obj && *start < endobj)
-				SGEN_LOG (0, "Object %p referenced in thread %p (id %p) at %p, stack: %p-%p", obj, info, (gpointer)mono_thread_info_get_tid (info), start, info->client_info.stack_start, info->client_info.stack_end);
+				SGEN_LOG (0, "Object %p referenced in thread %p (id %p) at %p, stack: %p-%p", obj, info, (gpointer)mono_thread_info_get_tid (info), start, info->client_info.stack_start, info->client_info.info.stack_end);
 			start++;
 		}
 
@@ -1008,9 +1008,9 @@ check_reference_for_xdomain (GCObject **ptr, GCObject *obj, MonoDomain *domain)
 	}
 
 	if (ref->vtable->klass == mono_defaults.string_class) {
-		MonoError error;
-		str = mono_string_to_utf8_checked ((MonoString*)ref, &error);
-		mono_error_cleanup (&error);
+		ERROR_DECL (error);
+		str = mono_string_to_utf8_checked ((MonoString*)ref, error);
+		mono_error_cleanup (error);
 	} else
 		str = NULL;
 	g_print ("xdomain reference in %p (%s.%s) at offset %d (%s) to %p (%s.%s) (%s)  -  pointed to by:\n",

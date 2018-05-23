@@ -12,6 +12,7 @@
 #include "config.h"
 
 #include "mono/metadata/handle.h"
+#include "mono/metadata/method-builder-ilgen-internals.h"
 #include "mono/metadata/remoting.h"
 #include "mono/metadata/marshal.h"
 #include "mono/metadata/marshal-internals.h"
@@ -21,6 +22,7 @@
 #include "mono/metadata/exception.h"
 #include "mono/metadata/debug-helpers.h"
 #include "mono/metadata/reflection-internals.h"
+#include "mono/metadata/assembly.h"
 
 typedef enum {
 	MONO_MARSHAL_NONE,			/* No marshalling needed */
@@ -51,6 +53,9 @@ typedef struct _MonoRemotingMethods MonoRemotingMethods;
 
 static MonoObject *
 mono_remoting_wrapper (MonoMethod *method, gpointer *params);
+
+static MonoException *
+mono_remoting_update_exception (MonoException *exc);
 
 static gint32
 mono_marshal_set_domain_by_id (gint32 id, MonoBoolean push);
@@ -206,6 +211,7 @@ mono_remoting_marshal_init (void)
 		register_icall (ves_icall_mono_marshal_xdomain_copy_value, "ves_icall_mono_marshal_xdomain_copy_value", "object object", FALSE);
 		register_icall (mono_marshal_xdomain_copy_out_value, "mono_marshal_xdomain_copy_out_value", "void object object", FALSE);
 		register_icall (mono_remoting_wrapper, "mono_remoting_wrapper", "object ptr ptr", FALSE);
+		register_icall (mono_remoting_update_exception, "mono_remoting_update_exception", "object object", FALSE);
 		register_icall (mono_upgrade_remote_class_wrapper, "mono_upgrade_remote_class_wrapper", "void object object", FALSE);
 
 #ifndef DISABLE_JIT
@@ -228,15 +234,15 @@ mono_remoting_marshal_init (void)
 static MonoReflectionType *
 type_from_handle (MonoType *handle)
 {
-	MonoError error;
+	ERROR_DECL (error);
 	MonoReflectionType *ret;
 	MonoDomain *domain = mono_domain_get (); 
 	MonoClass *klass = mono_class_from_mono_type (handle);
 
 	mono_class_init (klass);
 
-	ret = mono_type_get_object_checked (domain, handle, &error);
-	mono_error_set_pending_exception (&error);
+	ret = mono_type_get_object_checked (domain, handle, error);
+	mono_error_set_pending_exception (error);
 
 	return ret;
 }
@@ -368,7 +374,7 @@ mono_remoting_mb_create_and_cache (MonoMethod *key, MonoMethodBuilder *mb,
 static MonoObject *
 mono_remoting_wrapper (MonoMethod *method, gpointer *params)
 {
-	MonoError error;
+	ERROR_DECL (error);
 	MonoMethodMessage *msg;
 	MonoTransparentProxy *this_obj;
 	MonoObject *res, *exc;
@@ -397,9 +403,8 @@ mono_remoting_wrapper (MonoMethod *method, gpointer *params)
 				} else {
 					/* runtime_invoke expects a boxed instance */
 					if (mono_class_is_nullable (mono_class_from_mono_type (sig->params [i]))) {
-						mparams[i] = mono_nullable_box ((guint8 *)params [i], klass, &error);
-						if (!is_ok (&error))
-							goto fail;
+						mparams[i] = mono_nullable_box ((guint8 *)params [i], klass, error);
+						goto_if_nok (error, fail);
 					} else
 						mparams[i] = params [i];
 				}
@@ -408,48 +413,71 @@ mono_remoting_wrapper (MonoMethod *method, gpointer *params)
 			}
 		}
 
-		res = mono_runtime_invoke_checked (method, method->klass->valuetype? mono_object_unbox ((MonoObject*)this_obj): this_obj, mparams, &error);
-		if (!is_ok (&error))
-			goto fail;
+		res = mono_runtime_invoke_checked (method, method->klass->valuetype? mono_object_unbox ((MonoObject*)this_obj): this_obj, mparams, error);
+		goto_if_nok (error, fail);
 
 		return res;
 	}
 
-	msg = mono_method_call_message_new (method, params, NULL, NULL, NULL, &error);
-	if (!is_ok (&error))
-		goto fail;
+	msg = mono_method_call_message_new (method, params, NULL, NULL, NULL, error);
+	goto_if_nok (error, fail);
 
-	res = mono_remoting_invoke ((MonoObject *)this_obj->rp, msg, &exc, &out_args, &error);
-	if (!is_ok (&error))
-		goto fail;
+	res = mono_remoting_invoke ((MonoObject *)this_obj->rp, msg, &exc, &out_args, error);
+	goto_if_nok (error, fail);
 
 	if (exc) {
-		error_init (&error);
-		mono_error_set_exception_instance (&error, (MonoException *)exc);
+		error_init (error);
+		exc = (MonoObject*) mono_remoting_update_exception ((MonoException*)exc);
+		mono_error_set_exception_instance (error, (MonoException *)exc);
 		goto fail;
 	}
 
-	mono_method_return_message_restore (method, params, out_args, &error);
-	if (!is_ok (&error)) goto fail;
+	mono_method_return_message_restore (method, params, out_args, error);
+	goto_if_nok (error, fail);
 
 	return res;
 fail:
-	/* This icall will be called from managed code, and more over
-	 * from a protected wrapper so interruptions such as pending
-	 * exceptions will not be honored.  (See
-	 * is_running_protected_wrapper () in threads.c and
-	 * mono_marshal_get_remoting_invoke () in remoting.c)
-	 */
-	mono_error_raise_exception (&error); /* OK to throw, see note */
+	mono_error_set_pending_exception (error);
 	return NULL;
 } 
 
+/*
+ * Handles exception transformation at appdomain call boundary.
+ * Note this is called from target appdomain inside xdomain wrapper, but from
+ * source domain in the mono_remoting_wrapper slowpath.
+ */
+static MonoException *
+mono_remoting_update_exception (MonoException *exc)
+{
+	MonoInternalThread *thread;
+	MonoClass *klass = mono_object_get_class ((MonoObject*)exc);
+
+	/* Serialization error can only happen when still in the target appdomain */
+	if (!(mono_class_get_flags (klass) & TYPE_ATTRIBUTE_SERIALIZABLE)) {
+		MonoException *ret;
+		char *aname = mono_stringify_assembly_name (&klass->image->assembly->aname);
+		char *message = g_strdup_printf ("Type '%s' in Assembly '%s' is not marked as serializable", klass->name, aname);
+		ret =  mono_get_exception_serialization (message);
+		g_free (aname);
+		g_free (message);
+		return ret;
+	}
+
+	thread = mono_thread_internal_current ();
+	if (mono_object_get_class ((MonoObject*)exc) == mono_defaults.threadabortexception_class &&
+			thread->flags & MONO_THREAD_FLAG_APPDOMAIN_ABORT) {
+		mono_thread_internal_reset_abort (thread);
+		return mono_get_exception_appdomain_unloaded ();
+	}
+
+	return exc;
+}
 
 /**
  * mono_marshal_get_remoting_invoke:
  */
 MonoMethod *
-mono_marshal_get_remoting_invoke (MonoMethod *method)
+mono_marshal_get_remoting_invoke (MonoMethod *method, MonoError *error)
 {
 	MonoMethodSignature *sig;
 	MonoMethodBuilder *mb;
@@ -458,6 +486,7 @@ mono_marshal_get_remoting_invoke (MonoMethod *method)
 	WrapperInfo *info;
 
 	g_assert (method);
+	error_init (error);
 
 	if (method->wrapper_type == MONO_WRAPPER_REMOTING_INVOKE || method->wrapper_type == MONO_WRAPPER_XDOMAIN_INVOKE)
 		return method;
@@ -465,8 +494,8 @@ mono_marshal_get_remoting_invoke (MonoMethod *method)
 	/* this seems to be the best plase to put this, as all remoting invokes seem to get filtered through here */
 #ifndef DISABLE_COM
 	if (mono_class_is_com_object (method->klass) || method->klass == mono_class_try_get_com_object_class ()) {
-		MonoVTable *vtable = mono_class_vtable (mono_domain_get (), method->klass);
-		g_assert (vtable); /*FIXME do proper error handling*/
+		MonoVTable *vtable = mono_class_vtable_checked (mono_domain_get (), method->klass, error);
+		return_val_if_nok (error, NULL);
 
 		if (!mono_vtable_is_remote (vtable)) {
 			return mono_cominterop_get_invoke (method);
@@ -527,7 +556,7 @@ mono_marshal_get_remoting_invoke (MonoMethod *method)
 static void
 mono_marshal_xdomain_copy_out_value (MonoObject *src, MonoObject *dst)
 {
-	MonoError error;
+	ERROR_DECL (error);
 	if (src == NULL || dst == NULL) return;
 	
 	g_assert (mono_object_class (src) == mono_object_class (dst));
@@ -541,8 +570,8 @@ mono_marshal_xdomain_copy_out_value (MonoObject *src, MonoObject *dst)
 			int i, len = mono_array_length ((MonoArray *)dst);
 			for (i = 0; i < len; i++) {
 				MonoObject *item = (MonoObject *)mono_array_get ((MonoArray *)src, gpointer, i);
-				MonoObject *item_copy = mono_marshal_xdomain_copy_value (item, &error);
-				if (mono_error_set_pending_exception (&error))
+				MonoObject *item_copy = mono_marshal_xdomain_copy_value (item, error);
+				if (mono_error_set_pending_exception (error))
 					return;
 				mono_array_setref ((MonoArray *)dst, i, item_copy);
 			}
@@ -612,9 +641,9 @@ mono_marshal_emit_switch_domain (MonoMethodBuilder *mb)
 gpointer
 mono_compile_method_icall (MonoMethod *method)
 {
-	MonoError error;
-	gpointer result = mono_compile_method_checked (method, &error);
-	mono_error_set_pending_exception (&error);
+	ERROR_DECL (error);
+	gpointer result = mono_compile_method_checked (method, error);
+	mono_error_set_pending_exception (error);
 	return result;
 }
 
@@ -671,8 +700,8 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
 	int i, j, param_index, copy_locals_base;
 	MonoClass *ret_class = NULL;
 	int loc_array=0, loc_return=0, loc_serialized_exc=0;
-	MonoExceptionClause *clauses, *main_clause, *serialization_clause;
-	int pos, pos_leave, pos_leave_serialization;
+	MonoExceptionClause *main_clause;
+	int pos, pos_leave;
 	gboolean copy_return;
 	WrapperInfo *info;
 
@@ -714,8 +743,7 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
 
 	/* try */
 
-	clauses = (MonoExceptionClause *)mono_image_alloc0 (method->klass->image, 2 * sizeof (MonoExceptionClause));
-	main_clause = &clauses [0];
+	main_clause = (MonoExceptionClause *)mono_image_alloc0 (method->klass->image, sizeof (MonoExceptionClause));
 	main_clause->try_offset = mono_mb_get_label (mb);
 
 	/* Clean the call context */
@@ -896,33 +924,8 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
 	/* handler code */
 	main_clause->handler_offset = mono_mb_get_label (mb);
 
-	/*
-	 * We deserialize the exception in another try-catch so we can catch
-	 * serialization failure exceptions.
-	 */
-	serialization_clause = &clauses [1];
-	serialization_clause->try_offset = mono_mb_get_label (mb);
-
-	mono_mb_emit_managed_call (mb, method_rs_serialize_exc, NULL);
-	mono_mb_emit_stloc (mb, loc_serialized_exc);
-	mono_mb_emit_ldarg (mb, 2);
-	mono_mb_emit_ldloc (mb, loc_serialized_exc);
-	mono_mb_emit_byte (mb, CEE_STIND_REF);
-	pos_leave_serialization = mono_mb_emit_branch (mb, CEE_LEAVE);
-
-	/* Serialization exception catch */
-	serialization_clause->flags = MONO_EXCEPTION_CLAUSE_NONE;
-	serialization_clause->try_len = mono_mb_get_pos (mb) - serialization_clause->try_offset;
-	serialization_clause->data.catch_class = mono_defaults.object_class;
-
-	/* handler code */
-	serialization_clause->handler_offset = mono_mb_get_label (mb);
-
-	/*
-	 * If the serialization of the original exception failed we serialize the newly
-	 * thrown exception, which should always succeed, passing it over to the calling
-	 * domain.
-	 */
+	mono_mb_emit_icall (mb, mono_remoting_update_exception);
+	mono_mb_emit_op (mb, CEE_CASTCLASS, mono_defaults.exception_class);
 	mono_mb_emit_managed_call (mb, method_rs_serialize_exc, NULL);
 	mono_mb_emit_stloc (mb, loc_serialized_exc);
 	mono_mb_emit_ldarg (mb, 2);
@@ -930,13 +933,8 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
 	mono_mb_emit_byte (mb, CEE_STIND_REF);
 	mono_mb_emit_branch (mb, CEE_LEAVE);
 
-	/* end serialization exception catch */
-	serialization_clause->handler_len = mono_mb_get_pos (mb) - serialization_clause->handler_offset;
-	mono_mb_patch_branch (mb, pos_leave_serialization);
-
-	mono_mb_emit_branch (mb, CEE_LEAVE);
-	/* end main catch */
 	main_clause->handler_len = mono_mb_get_pos (mb) - main_clause->handler_offset;
+	/* end catch */
 	mono_mb_patch_branch (mb, pos_leave);
 	
 	if (copy_return)
@@ -944,7 +942,7 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
 
 	mono_mb_emit_byte (mb, CEE_RET);
 
-	mono_mb_set_clauses (mb, 2, clauses);
+	mono_mb_set_clauses (mb, 1, main_clause);
 #endif
 
 	info = mono_wrapper_info_create (mb, WRAPPER_SUBTYPE_NONE);
@@ -960,7 +958,7 @@ mono_marshal_get_xappdomain_dispatch (MonoMethod *method, int *marshal_types, in
  * Generates a fast remoting wrapper for cross app domain calls.
  */
 MonoMethod *
-mono_marshal_get_xappdomain_invoke (MonoMethod *method)
+mono_marshal_get_xappdomain_invoke (MonoMethod *method, MonoError *error)
 {
 	MonoMethodSignature *sig;
 	MonoMethodBuilder *mb;
@@ -977,6 +975,7 @@ mono_marshal_get_xappdomain_invoke (MonoMethod *method)
 	WrapperInfo *info;
 
 	g_assert (method);
+	error_init (error);
 	
 	if (method->wrapper_type == MONO_WRAPPER_REMOTING_INVOKE || method->wrapper_type == MONO_WRAPPER_XDOMAIN_INVOKE)
 		return method;
@@ -988,7 +987,7 @@ mono_marshal_get_xappdomain_invoke (MonoMethod *method)
 	mono_remoting_marshal_init ();
 
 	if (!mono_marshal_supports_fast_xdomain (method))
-		return mono_marshal_get_remoting_invoke (method);
+		return mono_marshal_get_remoting_invoke (method, error);
 	
 	if ((res = mono_marshal_remoting_find_in_cache (method, MONO_WRAPPER_XDOMAIN_INVOKE)))
 		return res;
@@ -1081,7 +1080,12 @@ mono_marshal_get_xappdomain_invoke (MonoMethod *method)
 	for (i = 0; i < sig->param_count; i++)
 		mono_mb_emit_ldarg (mb, i + 1);
 	
-	mono_mb_emit_managed_call (mb, mono_marshal_get_remoting_invoke (method), NULL);
+	MonoMethod * remoting_invoke_method = mono_marshal_get_remoting_invoke (method, error);
+	if (!is_ok (error)) {
+		mono_mb_free (mb);
+		return NULL;
+	}
+	mono_mb_emit_managed_call (mb, remoting_invoke_method, NULL);
 	mono_mb_emit_byte (mb, CEE_RET);
 	mono_mb_patch_short_branch (mb, pos_dispatch);
 
@@ -1290,10 +1294,11 @@ mono_marshal_get_xappdomain_invoke (MonoMethod *method)
  * mono_marshal_get_remoting_invoke_for_target:
  */
 MonoMethod *
-mono_marshal_get_remoting_invoke_for_target (MonoMethod *method, MonoRemotingTarget target_type)
+mono_marshal_get_remoting_invoke_for_target (MonoMethod *method, MonoRemotingTarget target_type, MonoError *error)
 {
+	error_init (error);
 	if (target_type == MONO_REMOTING_TARGET_APPDOMAIN) {
-		return mono_marshal_get_xappdomain_invoke (method);
+		return mono_marshal_get_xappdomain_invoke (method, error);
 	} else if (target_type == MONO_REMOTING_TARGET_COMINTEROP) {
 #ifndef DISABLE_COM
 		return mono_cominterop_get_invoke (method);
@@ -1301,7 +1306,7 @@ mono_marshal_get_remoting_invoke_for_target (MonoMethod *method, MonoRemotingTar
 		g_assert_not_reached ();
 #endif
 	} else {
-		return mono_marshal_get_remoting_invoke (method);
+		return mono_marshal_get_remoting_invoke (method, error);
 	}
 	/* Not erached */
 	return NULL;
@@ -1310,14 +1315,15 @@ mono_marshal_get_remoting_invoke_for_target (MonoMethod *method, MonoRemotingTar
 G_GNUC_UNUSED static gpointer
 mono_marshal_load_remoting_wrapper (MonoRealProxy *rp, MonoMethod *method)
 {
-	MonoError error;
+	ERROR_DECL (error);
 	MonoMethod *marshal_method = NULL;
 	if (rp->target_domain_id != -1)
-		marshal_method = mono_marshal_get_xappdomain_invoke (method);
+		marshal_method = mono_marshal_get_xappdomain_invoke (method, error);
 	else
-		marshal_method = mono_marshal_get_remoting_invoke (method);
-	gpointer compiled_ptr = mono_compile_method_checked (marshal_method, &error);
-	mono_error_assert_ok (&error);
+		marshal_method = mono_marshal_get_remoting_invoke (method, error);
+	mono_error_assert_ok (error);
+	gpointer compiled_ptr = mono_compile_method_checked (marshal_method, error);
+	mono_error_assert_ok (error);
 	return compiled_ptr;
 }
 
@@ -1325,7 +1331,7 @@ mono_marshal_load_remoting_wrapper (MonoRealProxy *rp, MonoMethod *method)
  * mono_marshal_get_remoting_invoke_with_check:
  */
 MonoMethod *
-mono_marshal_get_remoting_invoke_with_check (MonoMethod *method)
+mono_marshal_get_remoting_invoke_with_check (MonoMethod *method, MonoError *error)
 {
 	MonoMethodSignature *sig;
 	MonoMethodBuilder *mb;
@@ -1334,6 +1340,7 @@ mono_marshal_get_remoting_invoke_with_check (MonoMethod *method)
 	int i, pos, pos_rem;
 
 	g_assert (method);
+	error_init (error);
 
 	if (method->wrapper_type == MONO_WRAPPER_REMOTING_INVOKE_WITH_CHECK)
 		return method;
@@ -1360,14 +1367,22 @@ mono_marshal_get_remoting_invoke_with_check (MonoMethod *method)
 		pos_rem = mono_mb_emit_xdomain_check (mb, CEE_BEQ);
 		
 		/* wrapper for cross app domain calls */
-		native = mono_marshal_get_xappdomain_invoke (method);
+		native = mono_marshal_get_xappdomain_invoke (method, error);
+		if (!is_ok (error)) {
+			mono_mb_free (mb);
+			return NULL;
+		}
 		mono_mb_emit_managed_call (mb, native, mono_method_signature (native));
 		mono_mb_emit_byte (mb, CEE_RET);
 		
 		mono_mb_patch_branch (mb, pos_rem);
 	}
 	/* wrapper for normal remote calls */
-	native = mono_marshal_get_remoting_invoke (method);
+	native = mono_marshal_get_remoting_invoke (method, error);
+	if (!is_ok (error)) {
+		mono_mb_free (mb);
+		return NULL;
+	}
 	mono_mb_emit_managed_call (mb, native, mono_method_signature (native));
 	mono_mb_emit_byte (mb, CEE_RET);
 
@@ -1600,6 +1615,8 @@ mono_marshal_get_ldflda_wrapper (MonoType *type)
 	cache = get_cache (&klass->image->ldflda_wrapper_cache, mono_aligned_addr_hash, NULL);
 	if ((res = mono_marshal_find_in_cache (cache, klass)))
 		return res;
+
+	mono_remoting_marshal_init ();
 
 	/* we add the %p pointer value of klass because class names are not unique */
 	name = g_strdup_printf ("__ldflda_wrapper_%p_%s.%s", klass, klass->name_space, klass->name); 
@@ -1921,7 +1938,7 @@ mono_upgrade_remote_class_wrapper (MonoReflectionType *rtype_raw, MonoTransparen
 	MONO_HANDLE_DCL (MonoTransparentProxy, tproxy);
 	MonoDomain *domain = MONO_HANDLE_DOMAIN (tproxy);
 	MonoClass *klass = mono_class_from_mono_type (MONO_HANDLE_GETVAL (rtype, type));
-	mono_upgrade_remote_class (domain, MONO_HANDLE_CAST (MonoObject, tproxy), klass, &error);
+	mono_upgrade_remote_class (domain, MONO_HANDLE_CAST (MonoObject, tproxy), klass, error);
 	ICALL_RETURN ();
 }
 
@@ -1982,8 +1999,7 @@ xdomain_copy_array_element_inplace (MonoArrayHandle arr, int i, MonoError *error
 	MONO_HANDLE_ARRAY_GETREF (item, arr, i);
 	
 	MonoObjectHandle item_copy = mono_marshal_xdomain_copy_value_handle (item, error);
-	if (!is_ok (error))
-		goto leave;
+	goto_if_nok (error, leave);
 	MONO_HANDLE_ARRAY_SETREF (arr, i, item_copy);
 leave:
 	HANDLE_FUNCTION_RETURN_VAL (is_ok (error));
@@ -2027,8 +2043,7 @@ mono_marshal_xdomain_copy_value_handle (MonoObjectHandle val, MonoError *error)
 		uint32_t gchandle = mono_gchandle_from_handle (val, TRUE);
 		MonoObjectHandle res = MONO_HANDLE_NEW (MonoObject, mono_value_box_checked (domain, klass, ((char*)val) + sizeof(MonoObject), error)); /* FIXME use handles in mono_value_box_checked */
 		mono_gchandle_free (gchandle);
-		if (!is_ok (error))
-			goto leave;
+		goto_if_nok (error, leave);
 		MONO_HANDLE_ASSIGN (result, res);
 		break;
 	}
@@ -2037,8 +2052,7 @@ mono_marshal_xdomain_copy_value_handle (MonoObjectHandle val, MonoError *error)
 		uint32_t gchandle = mono_gchandle_from_handle (val, TRUE);
 		MonoStringHandle res = mono_string_new_utf16_handle (domain, mono_string_chars (MONO_HANDLE_RAW (str)), mono_string_handle_length (str), error);
 		mono_gchandle_free (gchandle);
-		if (!is_ok (error))
-			goto leave;
+		goto_if_nok (error, leave);
 		MONO_HANDLE_ASSIGN (result, res);
 		break;
 	}
@@ -2049,8 +2063,7 @@ mono_marshal_xdomain_copy_value_handle (MonoObjectHandle val, MonoError *error)
 		if (mt == MONO_MARSHAL_SERIALIZE)
 			goto leave;
 		MonoArrayHandle acopy = mono_array_clone_in_domain (domain, arr, error);
-		if (!is_ok (error))
-			goto leave;
+		goto_if_nok (error, leave);
 
 		if (mt == MONO_MARSHAL_COPY) {
 			int i, len = mono_array_handle_length (acopy);
@@ -2089,9 +2102,9 @@ mono_marshal_xdomain_copy_value (MonoObject* val_raw, MonoError *error)
 MonoObject *
 ves_icall_mono_marshal_xdomain_copy_value (MonoObject *val)
 {
-	MonoError error;
-	MonoObject *result = mono_marshal_xdomain_copy_value (val, &error);
-	mono_error_set_pending_exception (&error);
+	ERROR_DECL (error);
+	MonoObject *result = mono_marshal_xdomain_copy_value (val, error);
+	mono_error_set_pending_exception (error);
 	return result;
 }
 

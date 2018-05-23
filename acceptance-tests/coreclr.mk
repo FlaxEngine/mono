@@ -32,7 +32,7 @@ coreclr-runtest-coremanglib: coreclr-validate test-runner.exe $(CORECLR_COREMANG
 check-coreclr: coreclr-compile-tests coreclr-runtest-basic coreclr-runtest-coremanglib
 
 coreclr-gcstress: coreclr-validate GCStressTests.exe $(CORECLR_STRESSTESTSI_CS)
-	BVT_ROOT=$(realpath $(CORECLR_PATH)/tests/src/GC/Stress/Tests) $(RUNTIME) GCStressTests.exe $(CORECLR_PATH)/tests/src/GC/Stress/testmix_gc.config; if [ $$? -ne 100 ]; then exit 1; fi
+	BVT_ROOT=$(realpath $(CORECLR_PATH)/tests/src/GC/Stress/Tests) $(RUNTIME) GCStressTests.exe $(CORECLR_PATH)/tests/src/GC/Stress/$(if $(CI_PR),testmix_gc_pr.config,testmix_gc.config); if [ $$? -ne 100 ]; then exit 1; fi
 
 # Output a variable in $(2) to the file $(1), separated by newline characters
 # we need to do it in groups of 100 entries to make sure we don't exceed shell char limits
@@ -2217,7 +2217,6 @@ CORECLR_COREMANGLIB_TEST_CS_SRC=		\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gcgettotalmemory.cs	\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gckeepalive.cs	\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gcmaxgeneration.cs	\
-	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gcsuppressfinalize.cs	\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gcwaitforpendingfinalizers.cs	\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/globalization/calendarweekrule/calendarweekrulefirstday.cs	\
 	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/globalization/calendarweekrule/calendarweekrulefirstfourdayweek.cs	\
@@ -3981,6 +3980,10 @@ CORECLR_DISABLED_TEST_CS_SRC +=        \
 CORECLR_DISABLED_TEST_CS_SRC +=        \
        $(CORECLR_PATH)/tests/src/JIT/Directed/newarr/newarr.cs	\
 	   $(CORECLR_PATH)/tests/src/baseservices/exceptions/sharedexceptions/emptystacktrace/oomexception01.cs
+
+# https://github.com/mono/mono/issues/7432
+CORECLR_DISABLED_TEST_CS_SRC +=	\
+	$(CORECLR_PATH)/tests/src/CoreMangLib/cti/system/gc/gcsuppressfinalize.cs
 
 CORECLR_TEST_IL_SRC =			\
 	$(CORECLR_PATH)/tests/src/JIT/BBT/Scenario4/Not-Int32.il	\

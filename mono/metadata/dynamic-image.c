@@ -333,14 +333,9 @@ mono_dynamic_image_create (MonoDynamicAssembly *assembly, char *assembly_name, c
 	else
 		version = mono_get_runtime_info ()->runtime_version;
 
-#if HAVE_BOEHM_GC
-	/* The MonoGHashTable's need GC tracking */
-	image = (MonoDynamicImage *)GC_MALLOC (sizeof (MonoDynamicImage));
-#else
 	image = g_new0 (MonoDynamicImage, 1);
-#endif
 
-	mono_profiler_module_event (&image->image, MONO_PROFILE_START_LOAD);
+	MONO_PROFILER_RAISE (image_loading, (&image->image));
 	
 	/*g_print ("created image %p\n", image);*/
 	/* keep in sync with image.c */
@@ -357,19 +352,19 @@ mono_dynamic_image_create (MonoDynamicAssembly *assembly, char *assembly_name, c
 
 	mono_image_init (&image->image);
 
-	image->token_fixups = mono_g_hash_table_new_type ((GHashFunc)mono_object_hash, NULL, MONO_HASH_KEY_GC, MONO_ROOT_SOURCE_REFLECTION, "dynamic module token fixups table");
+	image->token_fixups = mono_g_hash_table_new_type ((GHashFunc)mono_object_hash, NULL, MONO_HASH_KEY_GC, MONO_ROOT_SOURCE_REFLECTION, NULL, "Reflection Dynamic Image Token Fixup Table");
 	image->method_to_table_idx = g_hash_table_new (NULL, NULL);
 	image->field_to_table_idx = g_hash_table_new (NULL, NULL);
 	image->method_aux_hash = g_hash_table_new (NULL, NULL);
 	image->vararg_aux_hash = g_hash_table_new (NULL, NULL);
 	image->handleref = g_hash_table_new (NULL, NULL);
-	image->tokens = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, "dynamic module tokens table");
-	image->generic_def_objects = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, "dynamic module generic definitions table");
+	image->tokens = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, NULL, "Reflection Dynamic Image Token Table");
+	image->generic_def_objects = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, NULL, "Reflection Dynamic Image Generic Definition Table");
 	image->typespec = g_hash_table_new ((GHashFunc)mono_metadata_type_hash, (GCompareFunc)mono_metadata_type_equal);
 	image->typeref = g_hash_table_new ((GHashFunc)mono_metadata_type_hash, (GCompareFunc)mono_metadata_type_equal);
 	image->blob_cache = g_hash_table_new ((GHashFunc)mono_blob_entry_hash, (GCompareFunc)mono_blob_entry_equal);
 	image->gen_params = g_ptr_array_new ();
-	image->remapped_tokens = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, "dynamic module remapped tokens table");
+	image->remapped_tokens = mono_g_hash_table_new_type (NULL, NULL, MONO_HASH_VALUE_GC, MONO_ROOT_SOURCE_REFLECTION, NULL, "Reflection Dynamic Image Remapped Token Table");
 
 	/*g_print ("string heap create for image %p (%s)\n", image, module_name);*/
 	string_heap_init (&image->sheap);
@@ -398,7 +393,7 @@ mono_dynamic_image_create (MonoDynamicAssembly *assembly, char *assembly_name, c
 	image->pe_kind = 0x1; /* ILOnly */
 	image->machine = 0x14c; /* I386 */
 	
-	mono_profiler_module_loaded (&image->image, MONO_PROFILE_OK);
+	MONO_PROFILER_RAISE (image_loaded, (&image->image));
 
 	dynamic_images_lock ();
 
@@ -564,10 +559,5 @@ mono_dynamic_image_free (MonoDynamicImage *image)
 void
 mono_dynamic_image_free_image (MonoDynamicImage *image)
 {
-	/* See create_dynamic_mono_image () */
-#if HAVE_BOEHM_GC
-	/* Allocated using GC_MALLOC */
-#else
 	g_free (image);
-#endif
 }

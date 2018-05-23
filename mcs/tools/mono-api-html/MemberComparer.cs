@@ -43,7 +43,7 @@ namespace Xamarin.ApiDiff {
 
 		protected virtual bool IsBreakingRemoval (XElement e)
 		{
-			return true;
+			return !e.Elements ("attributes").SelectMany (a => a.Elements ("attribute")).Any (c => c.Attribute ("name")?.Value == "System.ObsoleteAttribute");
 		}
 
 		public void Compare (XElement source, XElement target)
@@ -122,8 +122,10 @@ namespace Xamarin.ApiDiff {
 		{
 			bool a = false;
 			foreach (var item in elements) {
+				var memberDescription = $"{State.Namespace}.{State.Type}: Added {GroupName}: {GetDescription (item)}";
+				State.LogDebugMessage ($"Possible -a value: {memberDescription}");
 				SetContext (item);
-				if (State.IgnoreAdded.Any (re => re.IsMatch (GetDescription (item))))
+				if (State.IgnoreAdded.Any (re => re.IsMatch (memberDescription)))
 					continue;
 				if (!a) {
 					BeforeAdding (elements);
@@ -159,7 +161,9 @@ namespace Xamarin.ApiDiff {
 		{
 			bool r = false;
 			foreach (var item in elements) {
-				if (State.IgnoreRemoved.Any (re => re.IsMatch (GetDescription (item))))
+				var memberDescription = $"{State.Namespace}.{State.Type}: Removed {GroupName}: {GetDescription (item)}";
+				State.LogDebugMessage ($"Possible -r value: {memberDescription}");
+				if (State.IgnoreRemoved.Any (re => re.IsMatch (memberDescription)))
 					continue;
 				SetContext (item);
 				if (State.IgnoreNonbreaking && !IsBreakingRemoval (item))
@@ -374,7 +378,7 @@ namespace Xamarin.ApiDiff {
 						change.Append (paramSourceType);
 					}
 					change.Append (" ");
-					if (paramSourceName != paramTargetName) {
+					if (!State.IgnoreParameterNameChanges && paramSourceName != paramTargetName) {
 						change.AppendModified (paramSourceName, paramTargetName, true);
 					} else {
 						change.Append (paramSourceName);
@@ -404,12 +408,6 @@ namespace Xamarin.ApiDiff {
 			}
 
 			change.Append (")");
-
-			// Ignore any parameter name changes if requested.
-			if (State.IgnoreParameterNameChanges && !change.Breaking) {
-				change.AnyChange = false;
-				change.HasIgnoredChanges = true;
-			}
 		}
 
 		void RenderVTable (MethodAttributes source, MethodAttributes target, ApiChange change)
@@ -603,7 +601,7 @@ namespace Xamarin.ApiDiff {
 			if (srcObsolete == null) {
 				if (tgtObsolete == null)
 					return; // neither is obsolete
-				var change = new ApiChange ();
+				var change = new ApiChange (GetDescription (source));
 				change.Header = "Obsoleted " + GroupName;
 				change.Append (string.Format ("<span class='obsolete obsolete-{0}' data-is-non-breaking>", ElementName));
 				change.Append ("[Obsolete (");
