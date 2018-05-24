@@ -3869,6 +3869,19 @@ is_dynamic_method_from_assembly(MonoObject* obj, gpointer queue_user_data, gpoin
 	return mb->module->image == mono_assembly_get_image(assembly);
 }
 
+static gboolean
+remove_assembly_types_from_domain(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoType *type = (MonoType*)key;
+	MonoClass* klass = mono_class_from_mono_type(type);
+
+	if (klass && mono_class_get_image(klass)->assembly == assembly)
+		return TRUE;
+
+	return FALSE;
+}
+
 static void
 mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 {
@@ -3879,8 +3892,14 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		goto leave;
 
 	mono_loader_lock();
+
 	if (dynamic_method_queue)
 		mono_gc_reference_queue_foreach_remove2(dynamic_method_queue, is_dynamic_method_from_assembly, assembly);
+
+	mono_domain_lock(domain);
+	mono_g_hash_table_foreach_remove(domain->type_hash, remove_assembly_types_from_domain, assembly);
+	mono_domain_unlock(domain);
+
 	mono_loader_unlock();
 
 leave:
