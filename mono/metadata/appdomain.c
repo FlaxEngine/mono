@@ -1400,6 +1400,58 @@ leave:
 	HANDLE_FUNCTION_RETURN ();
 }
 
+static gboolean
+is_type_from_assembly(MonoType *type, MonoAssembly *assembly)
+{
+	gint argc;
+	MonoType* genericType;
+	MonoClass *klass = mono_class_from_mono_type(type);
+
+	// Prevent issues
+	if (!klass)
+		return FALSE;
+
+	// Check class source assembly
+	if (mono_class_get_image(klass)->assembly == assembly)
+		return TRUE;
+
+	// Check generic class argument types (recursive)
+	if (type->type == MONO_TYPE_GENERICINST)
+	{
+		argc = type->data.generic_class->context.class_inst->type_argc;
+		while (argc-- > 0)
+		{
+			genericType = type->data.generic_class->context.class_inst->type_argv[argc];
+			if (is_type_from_assembly(genericType, assembly))
+				return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+static gboolean
+remove_types_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoType *type = (MonoType*)key;
+	MonoClass *klass = mono_class_from_mono_type(type);
+
+	return is_type_from_assembly(type, assembly);
+}
+
+static gboolean
+remove_type_init_exception_hash_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoClass *klass = (MonoClass*)key;
+
+	if (mono_class_get_image(klass)->assembly == assembly)
+		return TRUE;
+
+	return FALSE;
+}
+
 static void
 mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 {
@@ -1416,6 +1468,38 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 	mono_domain_assemblies_lock(domain);
 	remove_assemblies_from_domain(domain, assembly, NULL);
 	mono_domain_assemblies_unlock(domain);
+
+	mono_loader_lock();
+	mono_domain_lock(domain);
+
+	//class_vtable_array
+	//proxy_vtable_hash
+	//special_static_fields
+
+	/*if (domain->class_vtable_array) {
+		int i;
+		for (i = 0; i < domain->class_vtable_array->len; ++i)
+		{
+			MonoVTable *vtable = (MonoVTable*)g_ptr_array_index(domain->class_vtable_array, i);
+			MonoObject *type = (MonoObject*)vtable->type;
+
+			if (type->vtable->klass != mono_defaults.runtimetype_class)
+			{
+				g_printf("vtable_array for %s.%s", type->vtable->klass->name_space, type->vtable->klass->name);
+				//is_type_from_assembly((MonoType*)type, assembly)
+				//MONO_GC_UNREGISTER_ROOT_IF_MOVING(vtable->type);
+			}
+		}
+	}*/
+
+	if (domain->type_hash)
+		mono_g_hash_table_foreach_remove(domain->type_hash, remove_types_from_assembly, assembly);
+
+	if (domain->type_init_exception_hash)
+		mono_g_hash_table_foreach_remove(domain->type_init_exception_hash, remove_type_init_exception_hash_from_assembly, assembly);
+
+	mono_domain_unlock(domain);
+	mono_loader_unlock();
 
 leave:
 	HANDLE_FUNCTION_RETURN();
