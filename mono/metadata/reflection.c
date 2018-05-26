@@ -208,6 +208,40 @@ mono_reflection_cleanup_domain (MonoDomain *domain)
 	}
 }
 
+struct AssemblyClearData
+{
+	MonoConcGHashTable *refobject_hash;
+	MonoAssembly *assembly;
+};
+
+static void
+cleanup_refobject_hash_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	struct AssemblyClearData *data = (struct AssemblyClearData*)user_data;
+	ReflectedEntry* e = (ReflectedEntry*)key;
+	MonoClass *klass = e->refclass;
+
+	if (!klass)
+		return;
+
+	if (klass->image->assembly == data->assembly)
+	{
+		free_reflected_entry(key);
+		mono_conc_g_hash_table_remove(data->refobject_hash, key);
+	}
+}
+
+void
+mono_reflection_cleanup_assembly(MonoDomain *domain, MonoAssembly *assembly)
+{
+	if (domain->refobject_hash) {
+		struct AssemblyClearData data;
+		data.refobject_hash = domain->refobject_hash;
+		data.assembly = assembly;
+		mono_conc_g_hash_table_foreach(domain->refobject_hash, cleanup_refobject_hash_assembly, &data);
+	}
+}
+
 /**
  * mono_assembly_get_object:
  * \param domain an app domain

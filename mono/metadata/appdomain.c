@@ -1452,6 +1452,18 @@ remove_type_init_exception_hash_from_assembly(gpointer key, gpointer value, gpoi
 	return FALSE;
 }
 
+static gboolean
+remove_delegate_hash_table_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoClass *klass = (MonoClass*)key;
+
+	if (mono_class_get_image(klass)->assembly == assembly)
+		return TRUE;
+
+	return FALSE;
+}
+
 static void
 mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 {
@@ -1469,8 +1481,14 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 	remove_assemblies_from_domain(domain, assembly, NULL);
 	mono_domain_assemblies_unlock(domain);
 
+	// Skip additional work, domain/runtime unload is performing enough clearing
+	if (mono_domain_is_unloading(domain) || mono_runtime_is_shutting_down())
+		goto leave;
+
 	mono_loader_lock();
 	mono_domain_lock(domain);
+
+	mono_reflection_cleanup_assembly(domain, assembly);
 
 	//class_vtable_array
 	//proxy_vtable_hash
@@ -1497,6 +1515,11 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 
 	if (domain->type_init_exception_hash)
 		mono_g_hash_table_foreach_remove(domain->type_init_exception_hash, remove_type_init_exception_hash_from_assembly, assembly);
+
+	//if(domain->delegate_hash_table)
+	//	mono_g_hash_table_foreach_remove(domain->delegate_hash_table, remove_delegate_hash_table_from_assembly, assembly);
+
+	//delegate_trampoline_hash!!!
 
 	mono_domain_unlock(domain);
 	mono_loader_unlock();
