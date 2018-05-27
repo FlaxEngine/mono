@@ -8509,7 +8509,13 @@ mono_class_is_assignable_from (MonoClass *klass, MonoClass *oklass)
 		return TRUE;
 
 	return mono_class_has_parent (oklass, klass);
-}	
+}
+
+mono_bool
+mono_class_is_from_assembly(MonoClass *klass, MonoAssembly *assembly)
+{
+	return mono_type_is_from_assembly(mono_class_get_type(klass), assembly);
+}
 
 /*Check if @oklass is variant compatible with @klass.*/
 static gboolean

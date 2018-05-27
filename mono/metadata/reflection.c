@@ -221,24 +221,28 @@ cleanup_refobject_hash_assembly(gpointer key, gpointer value, gpointer user_data
 	ReflectedEntry* e = (ReflectedEntry*)key;
 	MonoClass *klass = e->refclass;
 
-	if (!klass)
-		return;
-
-	if (klass->image->assembly == data->assembly)
+	if (mono_class_is_from_assembly(klass, data->assembly))
 	{
-		free_reflected_entry(key);
 		mono_conc_g_hash_table_remove(data->refobject_hash, key);
+		free_reflected_entry(key);
 	}
 }
 
 void
 mono_reflection_cleanup_assembly(MonoDomain *domain, MonoAssembly *assembly)
 {
-	if (domain->refobject_hash) {
+	/*if (domain->refobject_hash) {
 		struct AssemblyClearData data;
 		data.refobject_hash = domain->refobject_hash;
 		data.assembly = assembly;
 		mono_conc_g_hash_table_foreach(domain->refobject_hash, cleanup_refobject_hash_assembly, &data);
+	}*/
+
+	// TODO: don't destroy all data
+	if (domain->refobject_hash) {
+		mono_conc_g_hash_table_foreach(domain->refobject_hash, cleanup_refobject_hash, NULL);
+		mono_conc_g_hash_table_destroy(domain->refobject_hash);
+		domain->refobject_hash = NULL;
 	}
 }
 
