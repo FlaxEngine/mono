@@ -503,6 +503,17 @@ object_in_domain_predicate (MonoObject *obj, void *user_data)
 	return FALSE;
 }
 
+static gboolean
+object_in_assembly_predicate (MonoObject *obj, void *user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly *)user_data;
+	if (mono_object_is_from_assembly (obj, assembly)) {
+		SGEN_LOG (5, "Unregistering finalizer for object: %p (%s)", obj, sgen_client_vtable_get_name (SGEN_LOAD_VTABLE (obj)));
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /**
  * mono_gc_finalizers_for_domain:
  * \param domain the unloading appdomain
@@ -710,6 +721,46 @@ mono_gc_ephemeron_array_add (MonoObject *obj)
 }
 
 /*
+* Assembly handling
+*/
+
+void
+mono_gc_clear_assembly(MonoAssembly * assembly)
+{
+	int i;
+
+	MonoDomain *domain = mono_domain_get();
+
+	LOCK_GC;
+
+	sgen_stop_world(0, FALSE);
+
+	// Collect all objects
+	for (i = GENERATION_NURSERY; i < GENERATION_MAX; ++i)
+		sgen_perform_collection(0, i, "clear assembly", TRUE, FALSE);
+	SGEN_ASSERT(0, !sgen_concurrent_collection_in_progress(), "We just ordered a synchronous collection. Why are we collecting concurrently?");
+
+	// Colect things to finalize
+	major_collector.finish_sweeping();
+	sgen_process_fin_stage_entries();
+
+	sgen_clear_nursery_fragments();
+
+	// Cancel finalization of the assembly stuff (they should be disposed before)
+	for (i = GENERATION_NURSERY; i < GENERATION_MAX; ++i)
+		sgen_remove_finalizers_if(object_in_assembly_predicate, assembly, i);
+
+	if (domain == mono_get_root_domain()) {
+		sgen_pin_stats_report();
+		sgen_object_layout_dump(stdout);
+	}
+
+	sgen_restart_world(0, FALSE);
+
+	UNLOCK_GC;
+}
+
+/*
  * Appdomain handling
  */
 
@@ -844,6 +895,7 @@ mono_gc_clear_domain (MonoDomain * domain)
 	sgen_scan_area_with_callback (nursery_section->data, nursery_section->end_data,
 			(IterateObjectCallbackFunc)clear_domain_process_minor_object_callback, domain, FALSE, TRUE);
 
+#if 0
 	/* We need two passes over major and large objects because
 	   freeing such objects might give their memory back to the OS
 	   (in the case of large objects) or obliterate its vtable
@@ -873,6 +925,7 @@ mono_gc_clear_domain (MonoDomain * domain)
 	}
 	major_collector.iterate_objects (ITERATE_OBJECTS_SWEEP_NON_PINNED, (IterateObjectCallbackFunc)clear_domain_free_major_non_pinned_object_callback, domain);
 	major_collector.iterate_objects (ITERATE_OBJECTS_SWEEP_PINNED, (IterateObjectCallbackFunc)clear_domain_free_major_pinned_object_callback, domain);
+#endif
 
 	if (domain == mono_get_root_domain ()) {
 		sgen_pin_stats_report ();

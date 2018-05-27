@@ -149,7 +149,7 @@ void  mono_gc_run_finalize (void *obj, void *data);
 void  mono_gc_clear_domain (MonoDomain * domain);
 /* Signal early termination of finalizer processing inside the gc */
 void  mono_gc_suspend_finalizers (void);
-
+void  mono_gc_clear_assembly(MonoAssembly * assembly);
 
 /* 
  * Register a root which can only be written using a write barrier.

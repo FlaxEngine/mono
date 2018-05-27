@@ -43,6 +43,7 @@
 #include <mono/utils/mono-io-portability.h>
 #include <mono/utils/atomic.h>
 #include <mono/utils/mono-os-mutex.h>
+#include "mono-ptr-array.h"
 
 #ifndef HOST_WIN32
 #include <sys/types.h>
@@ -3892,6 +3893,9 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 	if (mono_atomic_dec_i32 (&assembly->ref_count) > 0)
 		return FALSE;
 
+	MonoDomain *domain = mono_domain_get();
+	gboolean is_only_assembly_unload = domain && domain->domain && !mono_domain_is_unloading(domain) && !mono_runtime_is_shutting_down();
+
 	MONO_PROFILER_RAISE (assembly_unloading, (assembly));
 
 	mono_assembly_invoke_unload_hook (assembly);
@@ -3899,6 +3903,11 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading assembly %s [%p].", assembly->aname.name, assembly);
 
 	mono_debug_close_image (assembly->image);
+
+	if (is_only_assembly_unload)
+	{
+		mono_gc_clear_assembly(assembly);
+	}
 
 	mono_assemblies_lock ();
 	loaded_assemblies = g_list_remove (loaded_assemblies, assembly);
