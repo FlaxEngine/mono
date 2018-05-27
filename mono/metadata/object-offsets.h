@@ -141,6 +141,9 @@ DECL_OFFSET(MonoTypedRef, value)
 DECL_OFFSET(MonoThreadsSync, status)
 DECL_OFFSET(MonoThreadsSync, nest)
 
+DECL_OFFSET(MonoProfilerCallContext, method)
+DECL_OFFSET(MonoProfilerCallContext, return_value)
+
 #ifdef HAVE_SGEN_GC
 DECL_OFFSET(SgenClientThreadInfo, in_critical_region)
 DECL_OFFSET(SgenThreadInfo, tlab_next)
@@ -158,8 +161,6 @@ DECL_OFFSET(MonoMethodRuntimeGenericContext, class_vtable)
 DECL_OFFSET(MonoJitTlsData, lmf)
 DECL_OFFSET(MonoJitTlsData, class_cast_from)
 DECL_OFFSET(MonoJitTlsData, class_cast_to)
-DECL_OFFSET(MonoJitTlsData, handler_block_return_address)
-DECL_OFFSET(MonoJitTlsData, restore_stack_prot)
 
 DECL_OFFSET(MonoGSharedVtMethodRuntimeInfo, locals_size)
 DECL_OFFSET(MonoGSharedVtMethodRuntimeInfo, entries) //XXX more to fix here
@@ -176,7 +177,16 @@ DECL_OFFSET(MonoDelegateTrampInfo, method_ptr)
 // Architecture-specific offsets
 // -----------------------------
 
-#if defined(TARGET_X86)
+#if defined(TARGET_WASM)
+DECL_OFFSET(MonoContext, wasm_ip)
+DECL_OFFSET(MonoContext, wasm_bp)
+DECL_OFFSET(MonoContext, wasm_sp)
+DECL_OFFSET(MonoContext, llvm_exc_reg)
+
+DECL_OFFSET(MonoLMF, method)
+DECL_OFFSET(MonoLMF, lmf_addr)
+
+#elif defined(TARGET_X86)
 DECL_OFFSET(MonoContext, eax)
 DECL_OFFSET(MonoContext, ebx)
 DECL_OFFSET(MonoContext, ecx)
@@ -201,7 +211,6 @@ DECL_OFFSET(MonoContext, fregs)
 
 DECL_OFFSET(MonoLMF, rsp)
 DECL_OFFSET(MonoLMF, rbp)
-DECL_OFFSET(MonoLMF, rip)
 
 DECL_OFFSET(DynCallArgs, res)
 
@@ -215,12 +224,15 @@ DECL_OFFSET(MonoLMF, iregs)
 DECL_OFFSET(MonoLMF, fregs)
 DECL_OFFSET(DynCallArgs, fpregs)
 DECL_OFFSET(DynCallArgs, has_fpregs)
+DECL_OFFSET(DynCallArgs, regs)
+DECL_OFFSET(DynCallArgs, n_stackargs)
 DECL_OFFSET(SeqPointInfo, ss_tramp_addr)
 #elif defined(TARGET_ARM64)
 DECL_OFFSET(MonoLMF, pc)
 DECL_OFFSET(MonoLMF, gregs)
 DECL_OFFSET(DynCallArgs, regs)
 DECL_OFFSET(DynCallArgs, fpregs)
+DECL_OFFSET(DynCallArgs, n_stackargs)
 DECL_OFFSET(DynCallArgs, n_fpargs)
 DECL_OFFSET(DynCallArgs, n_fpret)
 #endif
@@ -267,14 +279,15 @@ DECL_OFFSET(SeqPointInfo, ss_tramp_addr)
 DECL_OFFSET(SeqPointInfo, bp_addrs)
 #endif
 
-#ifdef ENABLE_INTERPRETER
-DECL_OFFSET(InterpMethodArguments, ilen)
-DECL_OFFSET(InterpMethodArguments, iargs)
-DECL_OFFSET(InterpMethodArguments, flen)
-DECL_OFFSET(InterpMethodArguments, fargs)
-DECL_OFFSET(InterpMethodArguments, retval)
-DECL_OFFSET(InterpMethodArguments, is_float_ret)
+#if defined(TARGET_AMD64) || defined(TARGET_ARM) || defined(TARGET_ARM64)
+DECL_OFFSET(CallContext, gregs)
+DECL_OFFSET(CallContext, fregs)
+DECL_OFFSET(CallContext, stack_size)
+DECL_OFFSET(CallContext, stack)
 #endif
+
+DECL_OFFSET(MonoFtnDesc, arg)
+DECL_OFFSET(MonoFtnDesc, addr)
 
 #endif //DISABLE_JIT_OFFSETS
 

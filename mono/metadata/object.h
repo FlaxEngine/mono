@@ -12,25 +12,25 @@ MONO_BEGIN_DECLS
 
 typedef mono_byte MonoBoolean;
 
-typedef struct _MonoString MonoString;
-typedef struct _MonoArray MonoArray;
-typedef struct _MonoReflectionMethod MonoReflectionMethod;
-typedef struct _MonoReflectionAssembly MonoReflectionAssembly;
-typedef struct _MonoReflectionModule MonoReflectionModule;
-typedef struct _MonoReflectionField MonoReflectionField;
-typedef struct _MonoReflectionProperty MonoReflectionProperty;
-typedef struct _MonoReflectionEvent MonoReflectionEvent;
-typedef struct _MonoReflectionType MonoReflectionType;
-typedef struct _MonoDelegate MonoDelegate;
-typedef struct _MonoException MonoException;
+typedef struct _MonoString MONO_RT_MANAGED_ATTR MonoString;
+typedef struct _MonoArray MONO_RT_MANAGED_ATTR MonoArray;
+typedef struct _MonoReflectionMethod MONO_RT_MANAGED_ATTR MonoReflectionMethod;
+typedef struct _MonoReflectionAssembly MONO_RT_MANAGED_ATTR MonoReflectionAssembly;
+typedef struct _MonoReflectionModule MONO_RT_MANAGED_ATTR MonoReflectionModule;
+typedef struct _MonoReflectionField MONO_RT_MANAGED_ATTR MonoReflectionField;
+typedef struct _MonoReflectionProperty MONO_RT_MANAGED_ATTR MonoReflectionProperty;
+typedef struct _MonoReflectionEvent MONO_RT_MANAGED_ATTR MonoReflectionEvent;
+typedef struct _MonoReflectionType MONO_RT_MANAGED_ATTR MonoReflectionType;
+typedef struct _MonoDelegate MONO_RT_MANAGED_ATTR MonoDelegate;
+typedef struct _MonoException MONO_RT_MANAGED_ATTR MonoException;
 typedef struct _MonoThreadsSync MonoThreadsSync;
-typedef struct _MonoThread MonoThread;
+typedef struct _MonoThread MONO_RT_MANAGED_ATTR MonoThread;
 typedef struct _MonoDynamicAssembly MonoDynamicAssembly;
 typedef struct _MonoDynamicImage MonoDynamicImage;
-typedef struct _MonoReflectionMethodBody MonoReflectionMethodBody;
-typedef struct _MonoAppContext MonoAppContext;
+typedef struct _MonoReflectionMethodBody MONO_RT_MANAGED_ATTR MonoReflectionMethodBody;
+typedef struct _MonoAppContext MONO_RT_MANAGED_ATTR MonoAppContext;
 
-typedef struct _MonoObject {
+typedef struct MONO_RT_MANAGED_ATTR _MonoObject {
 	MonoVTable *vtable;
 	MonoThreadsSync *synchronisation;
 } MonoObject;
@@ -200,6 +200,9 @@ mono_value_copy             (void* dest, void* src, MonoClass *klass);
 MONO_API void
 mono_value_copy_array       (MonoArray *dest, int dest_idx, void* src, int count);
 
+MONO_API MonoVTable *
+mono_object_get_vtable      (MonoObject *obj);
+
 MONO_API MonoDomain*
 mono_object_get_domain      (MonoObject *obj);
 
@@ -212,6 +215,10 @@ mono_object_unbox	    (MonoObject *obj);
 MONO_RT_EXTERNAL_ONLY
 MONO_API MonoObject *
 mono_object_clone	    (MonoObject *obj);
+
+// Checks if object comes from the given assembly
+MONO_API mono_bool
+mono_object_is_from_assembly(MonoObject *obj, MonoAssembly *assembly);
 
 MONO_RT_EXTERNAL_ONLY
 MONO_API MonoObject *
@@ -240,9 +247,18 @@ mono_object_get_size         (MonoObject *o);
 MONO_API void 
 mono_monitor_exit            (MonoObject *obj);
 
+MONO_RT_EXTERNAL_ONLY
 MONO_API void
 mono_raise_exception	    (MonoException *ex);
 
+MONO_API void
+mono_reraise_exception	    (MonoException *ex);
+
+MONO_RT_EXTERNAL_ONLY
+MONO_API mono_bool
+mono_runtime_set_pending_exception (MonoException *exc, mono_bool overwrite);
+
+MONO_RT_EXTERNAL_ONLY
 MONO_API void
 mono_reraise_exception	    (MonoException *ex);
 
@@ -253,6 +269,12 @@ mono_runtime_object_init    (MonoObject *this_obj);
 MONO_RT_EXTERNAL_ONLY
 MONO_API void
 mono_runtime_class_init	    (MonoVTable *vtable);
+
+MONO_API MonoDomain *
+mono_vtable_domain          (MonoVTable *vtable);
+
+MONO_API MonoClass *
+mono_vtable_class           (MonoVTable *vtable);
 
 MONO_API MonoMethod*
 mono_object_get_virtual_method (MonoObject *obj, MonoMethod *method);
@@ -393,11 +415,13 @@ MONO_API void         mono_gchandle_free        (uint32_t gchandle);
 typedef void (*mono_reference_queue_callback) (void *user_data);
 typedef struct _MonoReferenceQueue MonoReferenceQueue;
 typedef mono_bool (*mono_reference_queue_remove_check) (MonoObject* obj, void *user_data);
+typedef mono_bool (*mono_reference_queue_remove2_check) (MonoObject* obj, void *queue_user_data, void *user_data);
 
 MONO_API MonoReferenceQueue* mono_gc_reference_queue_new (mono_reference_queue_callback callback);
 MONO_API void mono_gc_reference_queue_free (MonoReferenceQueue *queue);
 MONO_API mono_bool mono_gc_reference_queue_add (MonoReferenceQueue *queue, MonoObject *obj, void *user_data);
 MONO_API mono_bool mono_gc_reference_queue_foreach_remove(MonoReferenceQueue *queue, mono_reference_queue_remove_check func, void *user_data);
+MONO_API mono_bool mono_gc_reference_queue_foreach_remove2(MonoReferenceQueue *queue, mono_reference_queue_remove2_check func, void *user_data);
 
 
 /* GC write barriers support */

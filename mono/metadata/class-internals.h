@@ -27,6 +27,7 @@ extern gboolean mono_align_small_structs;
 typedef struct _MonoMethodWrapper MonoMethodWrapper;
 typedef struct _MonoMethodInflated MonoMethodInflated;
 typedef struct _MonoMethodPInvoke MonoMethodPInvoke;
+typedef struct _MonoDynamicMethod MonoDynamicMethod;
 
 /* Properties that applies to a group of structs should better use a higher number
  * to avoid colision with type specific properties.
@@ -37,9 +38,12 @@ typedef struct _MonoMethodPInvoke MonoMethodPInvoke;
 
 #ifdef ENABLE_ICALL_EXPORT
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
+#define ICALL_DECL_EXPORT MONO_API
 #define ICALL_EXPORT MONO_API
 #else
-#define ICALL_EXPORT static
+#define ICALL_DECL_EXPORT
+/* Can't be static as icall.c defines icalls referenced by icall-tables.c */
+#define ICALL_EXPORT
 #endif
 
 typedef enum {
@@ -98,12 +102,17 @@ struct _MonoMethodWrapper {
 	void *method_data;
 };
 
+struct _MonoDynamicMethod {
+	MonoMethodWrapper method;
+	MonoAssembly *assembly;
+};
+
 struct _MonoMethodPInvoke {
 	MonoMethod method;
 	gpointer addr;
 	/* add marshal info */
 	guint16 piflags;  /* pinvoke flags */
-	guint16 implmap_idx;  /* index into IMPLMAP */
+	guint32 implmap_idx;  /* index into IMPLMAP */
 };
 
 /* 
@@ -320,6 +329,7 @@ struct _MonoClass {
 	guint has_finalize_inited    : 1; /* has_finalize is initialized */
 	guint fields_inited : 1; /* setup_fields () has finished */
 	guint has_failure : 1; /* See mono_class_get_exception_data () for a MonoErrorBoxed with the details */
+	guint has_weak_fields : 1; /* class has weak reference fields */
 
 	MonoClass  *parent;
 	MonoClass  *nested_in;
@@ -375,7 +385,7 @@ struct _MonoClass {
 };
 
 typedef struct {
-	MonoClass class;
+	MonoClass klass;
 	guint32	flags;
 	/*
 	 * From the TypeDef table
@@ -388,7 +398,7 @@ typedef struct {
 } MonoClassDef;
 
 typedef struct {
-	MonoClassDef class;
+	MonoClassDef klass;
 	MonoGenericContainer *generic_container;
 	/* The canonical GENERICINST where we instantiate a generic type definition with its own generic parameters.*/
 	/* Suppose we have class T`2<A,B> {...}.  canonical_inst is the GTD T`2 applied to A and B. */
@@ -396,21 +406,21 @@ typedef struct {
 } MonoClassGtd;
 
 typedef struct {
-	MonoClass class;
+	MonoClass klass;
 	MonoGenericClass *generic_class;
 } MonoClassGenericInst;
 
 typedef struct {
-	MonoClass class;
+	MonoClass klass;
 } MonoClassGenericParam;
 
 typedef struct {
-	MonoClass class;
+	MonoClass klass;
 	guint32 method_count;
 } MonoClassArray;
 
 typedef struct {
-	MonoClass class;
+	MonoClass klass;
 } MonoClassPointer;
 
 #ifdef COMPRESSED_INTERFACE_BITMAP
@@ -492,7 +502,7 @@ struct MonoVTable {
  */
 struct _MonoGenericInst {
 #ifndef MONO_SMALL_CONFIG
-	guint id;			/* unique ID for debugging */
+	gint32 id;			/* unique ID for debugging */
 #endif
 	guint type_argc    : 22;	/* number of type arguments */
 	guint is_open      :  1;	/* if this is an open type */
@@ -692,6 +702,7 @@ typedef struct MonoCachedClassInfo {
 	guint has_static_refs : 1;
 	guint no_special_static_fields : 1;
 	guint is_generic_container : 1;
+	guint has_weak_fields : 1;
 	guint32 cctor_token;
 	MonoImage *finalize_image;
 	guint32 finalize_token;
@@ -709,7 +720,6 @@ typedef struct {
 	MonoMethodSignature *sig;
 	const char *c_symbol;
 	MonoMethod *wrapper_method;
-	gboolean no_raise;
 } MonoJitICallInfo;
 
 void
@@ -754,39 +764,31 @@ typedef struct {
 #define MONO_SIZEOF_REMOTE_CLASS (sizeof (MonoRemoteClass) - MONO_ZERO_LEN_ARRAY * SIZEOF_VOID_P)
 
 typedef struct {
-	guint64 new_object_count;
-	size_t initialized_class_count;
-	size_t generic_vtable_count;
-	size_t used_class_count;
-	size_t method_count;
-	size_t class_vtable_size;
-	size_t class_static_data_size;
-	size_t generic_instance_count;
-	size_t generic_class_count;
-	size_t inflated_method_count;
-	size_t inflated_method_count_2;
-	size_t inflated_type_count;
-	size_t generics_metadata_size;
-	size_t delegate_creations;
-	size_t imt_tables_size;
-	size_t imt_number_of_tables;
-	size_t imt_number_of_methods;
-	size_t imt_used_slots;
-	size_t imt_slots_with_collisions;
-	size_t imt_max_collisions_in_slot;
-	size_t imt_method_count_when_max_collisions;
-	size_t imt_trampolines_size;
-	size_t jit_info_table_insert_count;
-	size_t jit_info_table_remove_count;
-	size_t jit_info_table_lookup_count;
-	size_t generics_sharable_methods;
-	size_t generics_unsharable_methods;
-	size_t generics_shared_methods;
-	size_t gsharedvt_methods;
-	size_t minor_gc_count;
-	size_t major_gc_count;
-	size_t minor_gc_time_usecs;
-	size_t major_gc_time_usecs;
+	gint32 initialized_class_count;
+	gint32 generic_vtable_count;
+	gint32 used_class_count;
+	gint32 method_count;
+	gint32 class_vtable_size;
+	gint32 class_static_data_size;
+	gint32 generic_class_count;
+	gint32 inflated_method_count;
+	gint32 inflated_type_count;
+	gint32 delegate_creations;
+	gint32 imt_tables_size;
+	gint32 imt_number_of_tables;
+	gint32 imt_number_of_methods;
+	gint32 imt_used_slots;
+	gint32 imt_slots_with_collisions;
+	gint32 imt_max_collisions_in_slot;
+	gint32 imt_method_count_when_max_collisions;
+	gint32 imt_trampolines_size;
+	gint32 jit_info_table_insert_count;
+	gint32 jit_info_table_remove_count;
+	gint32 jit_info_table_lookup_count;
+	gint32 generics_sharable_methods;
+	gint32 generics_unsharable_methods;
+	gint32 generics_shared_methods;
+	gint32 gsharedvt_methods;
 	gboolean enabled;
 } MonoStats;
 
@@ -798,78 +800,78 @@ typedef struct {
  */
 typedef struct {
 	/* JIT category */
-	guint32 jit_methods;
-	guint32 jit_bytes;
-	guint32 jit_time;
-	guint32 jit_failures;
+	gint32 jit_methods;
+	gint32 jit_bytes;
+	gint32 jit_time;
+	gint32 jit_failures;
 	/* Exceptions category */
-	guint32 exceptions_thrown;
-	guint32 exceptions_filters;
-	guint32 exceptions_finallys;
-	guint32 exceptions_depth;
-	guint32 aspnet_requests_queued;
-	guint32 aspnet_requests;
+	gint32 exceptions_thrown;
+	gint32 exceptions_filters;
+	gint32 exceptions_finallys;
+	gint32 exceptions_depth;
+	gint32 aspnet_requests_queued;
+	gint32 aspnet_requests;
 	/* Memory category */
-	guint32 gc_collections0;
-	guint32 gc_collections1;
-	guint32 gc_collections2;
-	guint32 gc_promotions0;
-	guint32 gc_promotions1;
-	guint32 gc_promotion_finalizers;
-	guint32 gc_gen0size;
-	guint32 gc_gen1size;
-	guint32 gc_gen2size;
-	guint32 gc_lossize;
-	guint32 gc_fin_survivors;
-	guint32 gc_num_handles;
-	guint32 gc_allocated;
-	guint32 gc_induced;
-	guint32 gc_time;
-	guint32 gc_total_bytes;
-	guint32 gc_committed_bytes;
-	guint32 gc_reserved_bytes;
-	guint32 gc_num_pinned;
-	guint32 gc_sync_blocks;
+	gint32 gc_collections0;
+	gint32 gc_collections1;
+	gint32 gc_collections2;
+	gint32 gc_promotions0;
+	gint32 gc_promotions1;
+	gint32 gc_promotion_finalizers;
+	gint64 gc_gen0size;
+	gint64 gc_gen1size;
+	gint64 gc_gen2size;
+	gint32 gc_lossize;
+	gint32 gc_fin_survivors;
+	gint32 gc_num_handles;
+	gint32 gc_allocated;
+	gint32 gc_induced;
+	gint32 gc_time;
+	gint64 gc_total_bytes;
+	gint64 gc_committed_bytes;
+	gint64 gc_reserved_bytes;
+	gint32 gc_num_pinned;
+	gint32 gc_sync_blocks;
 	/* Remoting category */
-	guint32 remoting_calls;
-	guint32 remoting_channels;
-	guint32 remoting_proxies;
-	guint32 remoting_classes;
-	guint32 remoting_objects;
-	guint32 remoting_contexts;
+	gint32 remoting_calls;
+	gint32 remoting_channels;
+	gint32 remoting_proxies;
+	gint32 remoting_classes;
+	gint32 remoting_objects;
+	gint32 remoting_contexts;
 	/* Loader category */
-	guint32 loader_classes;
-	guint32 loader_total_classes;
-	guint32 loader_appdomains;
-	guint32 loader_total_appdomains;
-	guint32 loader_assemblies;
-	guint32 loader_total_assemblies;
-	guint32 loader_failures;
-	guint32 loader_bytes;
-	guint32 loader_appdomains_uloaded;
+	gint32 loader_classes;
+	gint32 loader_total_classes;
+	gint32 loader_appdomains;
+	gint32 loader_total_appdomains;
+	gint32 loader_assemblies;
+	gint32 loader_total_assemblies;
+	gint32 loader_failures;
+	gint32 loader_bytes;
+	gint32 loader_appdomains_uloaded;
 	/* Threads and Locks category  */
-	guint32 thread_contentions;
-	guint32 thread_queue_len;
-	guint32 thread_queue_max;
-	guint32 thread_num_logical;
-	guint32 thread_num_physical;
-	guint32 thread_cur_recognized;
-	guint32 thread_num_recognized;
+	gint32 thread_contentions;
+	gint32 thread_queue_len;
+	gint32 thread_queue_max;
+	gint32 thread_num_logical;
+	gint32 thread_num_physical;
+	gint32 thread_cur_recognized;
+	gint32 thread_num_recognized;
 	/* Interop category */
-	guint32 interop_num_ccw;
-	guint32 interop_num_stubs;
-	guint32 interop_num_marshals;
+	gint32 interop_num_ccw;
+	gint32 interop_num_stubs;
+	gint32 interop_num_marshals;
 	/* Security category */
-	guint32 security_num_checks;
-	guint32 security_num_link_checks;
-	guint32 security_time;
-	guint32 security_depth;
-	guint32 unused;
+	gint32 security_num_checks;
+	gint32 security_num_link_checks;
+	gint32 security_time;
+	gint32 security_depth;
+	gint32 unused;
 	/* Threadpool */
-	guint64 threadpool_workitems;
-	guint64 threadpool_ioworkitems;
-	guint threadpool_threads;
-	guint threadpool_iothreads;
+	gint32 threadpool_threads;
+	gint64 threadpool_workitems;
+	gint64 threadpool_ioworkitems;
+	gint32 threadpool_iothreads;
 } MonoPerfCounters;
 
 extern MonoPerfCounters *mono_perfcounters;
@@ -917,7 +919,7 @@ void
 mono_classes_cleanup (void);
 
 void
-mono_class_layout_fields (MonoClass *klass, int base_instance_size, int packing_size, gboolean sre);
+mono_class_layout_fields (MonoClass *klass, int base_instance_size, int packing_size, int real_size, gboolean sre);
 
 void
 mono_class_setup_interface_offsets (MonoClass *klass);
@@ -941,7 +943,7 @@ MonoMethod*
 mono_class_get_method_by_index (MonoClass *klass, int index);
 
 MonoMethod*
-mono_class_get_inflated_method (MonoClass *klass, MonoMethod *method);
+mono_class_get_inflated_method (MonoClass *klass, MonoMethod *method, MonoError *error);
 
 MonoMethod*
 mono_class_get_vtable_entry (MonoClass *klass, int offset);
@@ -955,9 +957,8 @@ mono_class_get_vtable_size (MonoClass *klass);
 gboolean
 mono_class_is_open_constructed_type (MonoType *t);
 
-gboolean
-mono_class_get_overrides_full (MonoImage *image, guint32 type_token, MonoMethod ***overrides, gint32 *num_overrides,
-			       MonoGenericContext *generic_context);
+void
+mono_class_get_overrides_full (MonoImage *image, guint32 type_token, MonoMethod ***overrides, gint32 *num_overrides, MonoGenericContext *generic_context, MonoError *error);
 
 MonoMethod*
 mono_class_get_cctor (MonoClass *klass) MONO_LLVM_INTERNAL;
@@ -1027,13 +1028,13 @@ void
 mono_method_set_generic_container (MonoMethod *method, MonoGenericContainer* container);
 
 MonoMethod*
-mono_class_inflate_generic_method_full (MonoMethod *method, MonoClass *klass_hint, MonoGenericContext *context);
-
-MonoMethod*
 mono_class_inflate_generic_method_full_checked (MonoMethod *method, MonoClass *klass_hint, MonoGenericContext *context, MonoError *error);
 
 MonoMethod *
 mono_class_inflate_generic_method_checked (MonoMethod *method, MonoGenericContext *context, MonoError *error);
+
+MonoImageSet *
+mono_metadata_get_image_set_for_class (MonoClass *klass);
 
 MonoImageSet *
 mono_metadata_get_image_set_for_method (MonoMethodInflated *method);
@@ -1112,8 +1113,10 @@ typedef struct {
 	MonoClass *customattribute_data_class;
 	MonoClass *critical_finalizer_object; /* MAYBE NULL */
 	MonoClass *generic_ireadonlylist_class;
+	MonoClass *generic_ienumerator_class;
 	MonoClass *threadpool_wait_callback_class;
 	MonoMethod *threadpool_perform_wait_callback_method;
+	MonoClass *console_class;
 } MonoDefaults;
 
 #ifdef DISABLE_REMOTING
@@ -1176,6 +1179,8 @@ GENERATE_GET_CLASS_WITH_CACHE_DECL (variant)
 
 #endif
 
+GENERATE_GET_CLASS_WITH_CACHE_DECL (appdomain_unloaded_exception)
+
 extern MonoDefaults mono_defaults;
 
 void
@@ -1232,7 +1237,7 @@ MonoJitICallInfo *
 mono_register_jit_icall (gconstpointer func, const char *name, MonoMethodSignature *sig, gboolean is_save);
 
 MonoJitICallInfo *
-mono_register_jit_icall_full (gconstpointer func, const char *name, MonoMethodSignature *sig, gboolean is_save, gboolean no_raise, const char *c_symbol);
+mono_register_jit_icall_full (gconstpointer func, const char *name, MonoMethodSignature *sig, gboolean no_wrapper, const char *c_symbol);
 
 void
 mono_register_jit_icall_wrapper (MonoJitICallInfo *info, gconstpointer wrapper);
@@ -1303,9 +1308,6 @@ mono_type_get_checked        (MonoImage *image, guint32 type_token, MonoGenericC
 gboolean
 mono_generic_class_is_generic_type_definition (MonoGenericClass *gklass);
 
-MonoMethod*
-mono_class_get_method_generic (MonoClass *klass, MonoMethod *method);
-
 MonoType*
 mono_type_get_basic_type_from_generic (MonoType *type);
 
@@ -1355,7 +1357,7 @@ MonoClassField*
 mono_class_get_field_from_name_full (MonoClass *klass, const char *name, MonoType *type);
 
 MonoVTable*
-mono_class_vtable_full (MonoDomain *domain, MonoClass *klass, MonoError *error);
+mono_class_vtable_checked (MonoDomain *domain, MonoClass *klass, MonoError *error);
 
 gboolean
 mono_class_is_assignable_from_slow (MonoClass *target, MonoClass *candidate);
@@ -1392,7 +1394,7 @@ mono_class_full_name (MonoClass *klass);
 MonoClass*
 mono_class_inflate_generic_class_checked (MonoClass *gklass, MonoGenericContext *context, MonoError *error);
 
-MonoClass *
+MONO_PROFILER_API MonoClass *
 mono_class_get_checked (MonoImage *image, guint32 type_token, MonoError *error);
 
 MonoClass *
@@ -1475,16 +1477,16 @@ void
 mono_class_set_field_count (MonoClass *klass, guint32 count);
 
 MonoMarshalType*
-mono_class_get_marshal_info (MonoClass *class);
+mono_class_get_marshal_info (MonoClass *klass);
 
 void
-mono_class_set_marshal_info (MonoClass *class, MonoMarshalType *marshal_info);
+mono_class_set_marshal_info (MonoClass *klass, MonoMarshalType *marshal_info);
 
 guint32
-mono_class_get_ref_info_handle (MonoClass *class);
+mono_class_get_ref_info_handle (MonoClass *klass);
 
 guint32
-mono_class_set_ref_info_handle (MonoClass *class, guint32 value);
+mono_class_set_ref_info_handle (MonoClass *klass, guint32 value);
 
 MonoErrorBoxed*
 mono_class_get_exception_data (MonoClass *klass);
@@ -1517,13 +1519,34 @@ void
 mono_class_set_field_def_values (MonoClass *klass, MonoFieldDefaultValue *values);
 
 guint32
-mono_class_get_declsec_flags (MonoClass *class);
+mono_class_get_declsec_flags (MonoClass *klass);
 
 void
-mono_class_set_declsec_flags (MonoClass *class, guint32 value);
+mono_class_set_declsec_flags (MonoClass *klass, guint32 value);
 
 void
 mono_class_set_is_com_object (MonoClass *klass);
+
+void
+mono_class_set_weak_bitmap (MonoClass *klass, int nbits, gsize *bits);
+
+gsize*
+mono_class_get_weak_bitmap (MonoClass *klass, int *nbits);
+
+MonoMethod *
+mono_class_get_method_from_name_checked (MonoClass *klass, const char *name, int param_count, int flags, MonoError *error);
+
+gboolean
+mono_method_has_no_body (MonoMethod *method);
+
+// FIXME Replace all internal callers of mono_method_get_header_checked with
+// mono_method_get_header_internal; the difference is in error initialization.
+//
+// And then mark mono_method_get_header_checked as MONO_RT_EXTERNAL_ONLY MONO_API.
+//
+// Internal callers expected to use ERROR_DECL. External callers are not.
+MonoMethodHeader*
+mono_method_get_header_internal (MonoMethod *method, MonoError *error);
 
 /*Now that everything has been defined, let's include the inline functions */
 #include <mono/metadata/class-inlines.h>

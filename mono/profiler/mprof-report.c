@@ -54,12 +54,12 @@
  *                    - column: The column on the line
  */
 #include <config.h>
-#include "mono-profiler-log.h"
+#include "log.h"
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
 #include <time.h>
-#if !defined(__APPLE__) && !defined(__FreeBSD__)
+#if !defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__OpenBSD__)
 #include <malloc.h>
 #endif
 #include <unistd.h>
@@ -75,6 +75,23 @@
 
 #define HASH_SIZE 9371
 #define SMALL_HASH_SIZE 31
+
+/* Version < 14 root type enum */
+typedef enum {
+	/* Upper 2 bytes. */
+	MONO_PROFILER_GC_ROOT_PINNING = 1 << 8,
+	MONO_PROFILER_GC_ROOT_WEAKREF = 2 << 8,
+	MONO_PROFILER_GC_ROOT_INTERIOR = 4 << 8,
+
+	/* Lower 2 bytes (flags). */
+	MONO_PROFILER_GC_ROOT_STACK = 1 << 0,
+	MONO_PROFILER_GC_ROOT_FINALIZER = 1 << 1,
+	MONO_PROFILER_GC_ROOT_HANDLE = 1 << 2,
+	MONO_PROFILER_GC_ROOT_OTHER = 1 << 3,
+	MONO_PROFILER_GC_ROOT_MISC = 1 << 4,
+
+	MONO_PROFILER_GC_ROOT_TYPEMASK = 0xff,
+} MonoProfilerGCRootType;
 
 static int debug = 0;
 static int collect_traces = 0;
@@ -661,6 +678,54 @@ lookup_class (intptr_t klass)
 	return cd;
 }
 
+typedef struct _VTableDesc VTableDesc;
+struct _VTableDesc {
+	VTableDesc *next;
+	intptr_t vtable;
+	ClassDesc *klass;
+};
+
+static VTableDesc* vtable_hash [HASH_SIZE] = {0};
+
+static VTableDesc*
+add_vtable (intptr_t vtable, intptr_t klass)
+{
+	int slot = ((vtable >> 2) & 0xffff) % HASH_SIZE;
+
+	VTableDesc *vt = vtable_hash [slot];
+
+	while (vt && vt->vtable != vtable)
+		vt = vt->next;
+
+	if (vt)
+		return vt;
+
+	vt = (VTableDesc *) g_calloc (sizeof (VTableDesc), 1);
+
+	vt->vtable = vtable;
+	vt->klass = lookup_class (klass);
+	vt->next = vtable_hash [slot];
+
+	vtable_hash [slot] = vt;
+
+	return vt;
+}
+
+static VTableDesc *
+lookup_vtable (intptr_t vtable)
+{
+	int slot = ((vtable >> 2) & 0xffff) % HASH_SIZE;
+	VTableDesc *vt = vtable_hash [slot];
+
+	while (vt && vt->vtable != vtable)
+		vt = vt->next;
+
+	if (!vt)
+		return add_vtable (vtable, 0);
+
+	return vt;
+}
+
 typedef struct _MethodDesc MethodDesc;
 struct _MethodDesc {
 	MethodDesc *next;
@@ -895,6 +960,23 @@ lookup_unmanaged_binary (uintptr_t addr)
 	}
 	return NULL;
 }
+
+// For backwards compatibility.
+enum {
+	SAMPLE_CYCLES = 1,
+	SAMPLE_INSTRUCTIONS,
+	SAMPLE_CACHE_MISSES,
+	SAMPLE_CACHE_REFS,
+	SAMPLE_BRANCHES,
+	SAMPLE_BRANCH_MISSES,
+};
+
+enum {
+	MONO_GC_EVENT_MARK_START = 1,
+	MONO_GC_EVENT_MARK_END = 2,
+	MONO_GC_EVENT_RECLAIM_START = 3,
+	MONO_GC_EVENT_RECLAIM_END = 4,
+};
 
 static const char*
 sample_type_name (int type)
@@ -1238,6 +1320,8 @@ heap_shot_find_obj_slot (HeapShot *hs, uintptr_t objaddr)
 	uintptr_t i;
 	uintptr_t start_pos;
 	HeapObjectDesc **hash = hs->objects_hash;
+	if (hs->objects_hash_size == 0)
+		return -1;
 	start_pos = ((uintptr_t)objaddr >> 3) % hs->objects_hash_size;
 	i = start_pos;
 	do {
@@ -1355,7 +1439,7 @@ heap_shot_mark_objects (HeapShot *hs)
 		}
 		obj = hs->objects_hash [oi];
 		cd = obj->hklass;
-		if (hs->roots_types [i] & MONO_PROFILE_GC_ROOT_PINNING)
+		if (hs->roots_types [i] & MONO_PROFILER_GC_ROOT_PINNING)
 			cd->pinned_references++;
 		cd->root_references++;
 	}
@@ -1957,12 +2041,12 @@ get_handle_name (int htype)
 static const char*
 get_root_name (int rtype)
 {
-	switch (rtype & MONO_PROFILE_GC_ROOT_TYPEMASK) {
-	case MONO_PROFILE_GC_ROOT_STACK: return "stack";
-	case MONO_PROFILE_GC_ROOT_FINALIZER: return "finalizer";
-	case MONO_PROFILE_GC_ROOT_HANDLE: return "handle";
-	case MONO_PROFILE_GC_ROOT_OTHER: return "other";
-	case MONO_PROFILE_GC_ROOT_MISC: return "misc";
+	switch (rtype & MONO_PROFILER_GC_ROOT_TYPEMASK) {
+	case MONO_PROFILER_GC_ROOT_STACK: return "stack";
+	case MONO_PROFILER_GC_ROOT_FINALIZER: return "finalizer";
+	case MONO_PROFILER_GC_ROOT_HANDLE: return "handle";
+	case MONO_PROFILER_GC_ROOT_OTHER: return "other";
+	case MONO_PROFILER_GC_ROOT_MISC: return "misc";
 	default: return "unknown";
 	}
 }
@@ -2478,8 +2562,7 @@ decode_buffer (ProfContext *ctx)
 					decode_uleb128 (p, &p); /* flags */
 				if (debug)
 					fprintf (outfile, "%s class %p (%s in %p) at %llu\n", load_str, (void*)(ptr_base + ptrdiff), p, (void*)(ptr_base + imptrdiff), (unsigned long long) time_base);
-				if (subtype == TYPE_END_LOAD)
-					add_class (ptr_base + ptrdiff, (char*)p);
+				add_class (ptr_base + ptrdiff, (char*)p);
 				while (*p) p++;
 				p++;
 			} else if (mtype == TYPE_IMAGE) {
@@ -2492,6 +2575,8 @@ decode_buffer (ProfContext *ctx)
 				while (*p) p++;
 				p++;
 			} else if (mtype == TYPE_ASSEMBLY) {
+				if (ctx->data_version > 13)
+					decode_sleb128 (p, &p); // image
 				if (ctx->data_version < 13)
 					decode_uleb128 (p, &p); /* flags */
 				if (debug)
@@ -2542,6 +2627,12 @@ decode_buffer (ProfContext *ctx)
 					while (*p) p++;
 					p++;
 				}
+			} else if (mtype == TYPE_VTABLE) {
+				intptr_t domaindiff = decode_sleb128 (p, &p);
+				intptr_t classdiff = decode_sleb128 (p, &p);
+				if (debug)
+					fprintf (outfile, "vtable %p for class %p in domain %p at %llu\n", (void *) (ptrdiff + ptr_base), (void *) (classdiff + ptr_base), (void *) (domaindiff + ptr_base), (unsigned long long) time_base);
+				add_vtable (ptr_base + ptrdiff, ptr_base + classdiff);
 			}
 			break;
 		}
@@ -2554,12 +2645,17 @@ decode_buffer (ProfContext *ctx)
 			int num_bt = 0;
 			MethodDesc* sframes [8];
 			MethodDesc** frames = sframes;
-			ClassDesc *cd = lookup_class (ptr_base + ptrdiff);
+			ClassDesc *cd;
+			if (ctx->data_version > 14) {
+				VTableDesc *vt = lookup_vtable (ptr_base + ptrdiff);
+				cd = vt->klass;
+			} else
+				cd = lookup_class (ptr_base + ptrdiff);
 			len = decode_uleb128 (p, &p);
 			LOG_TIME (time_base, tdiff);
 			time_base += tdiff;
 			if (debug)
-				fprintf (outfile, "alloced object %p, size %llu (%s) at %llu\n", (void*)OBJ_ADDR (objdiff), (unsigned long long) len, lookup_class (ptr_base + ptrdiff)->name, (unsigned long long) time_base);
+				fprintf (outfile, "alloced object %p, size %llu (%s) at %llu\n", (void*)OBJ_ADDR (objdiff), (unsigned long long) len, cd->name, (unsigned long long) time_base);
 			if (has_bt) {
 				num_bt = 8;
 				frames = decode_bt (ctx, sframes, &num_bt, p, &p, ptr_base, &method_base);
@@ -2643,7 +2739,12 @@ decode_buffer (ProfContext *ctx)
 				uintptr_t num = decode_uleb128 (p, &p);
 				uintptr_t ref_offset = 0;
 				uintptr_t last_obj_offset = 0;
-				ClassDesc *cd = lookup_class (ptr_base + ptrdiff);
+				ClassDesc *cd;
+				if (ctx->data_version > 14) {
+					VTableDesc *vt = lookup_vtable (ptr_base + ptrdiff);
+					cd = vt->klass;
+				} else
+					cd = lookup_class (ptr_base + ptrdiff);
 				if (size) {
 					HeapClassDesc *hcd = add_heap_shot_class (thread->current_heap_shot, cd, size);
 					if (collect_traces) {
@@ -2671,29 +2772,68 @@ decode_buffer (ProfContext *ctx)
 					fprintf (outfile, "traced object %p, size %llu (%s), refs: %zd\n", (void*)OBJ_ADDR (objdiff), (unsigned long long) size, cd->name, num);
 			} else if (subtype == TYPE_HEAP_ROOT) {
 				uintptr_t num;
-				if (ctx->data_version > 12) {
+				if (ctx->data_version > 14) {
+					int i;
 					uint64_t tdiff = decode_uleb128 (p + 1, &p);
 					LOG_TIME (time_base, tdiff);
 					time_base += tdiff;
 					num = decode_uleb128 (p, &p);
-				} else
-					num = decode_uleb128 (p + 1, &p);
-				uintptr_t gc_num G_GNUC_UNUSED = decode_uleb128 (p, &p);
-				int i;
-				for (i = 0; i < num; ++i) {
-					intptr_t objdiff = decode_sleb128 (p, &p);
-					int root_type;
-					if (ctx->data_version > 12)
-						root_type = *p++;
-					else
-						root_type = decode_uleb128 (p, &p);
-					/* we just discard the extra info for now */
-					uintptr_t extra_info = decode_uleb128 (p, &p);
-					if (debug)
-						fprintf (outfile, "object %p is a %s root\n", (void*)OBJ_ADDR (objdiff), get_root_name (root_type));
-					if (collect_traces)
-						thread_add_root (thread, OBJ_ADDR (objdiff), root_type, extra_info);
+					for (i = 0; i < num; ++i) {
+						intptr_t ptrdiff = decode_sleb128 (p, &p);
+						intptr_t objdiff = decode_sleb128 (p, &p);
+
+						if (debug)
+							fprintf (outfile, "root object %p at address %p\n", (void*)OBJ_ADDR (objdiff), (void *) (ptr_base + ptrdiff));
+						if (collect_traces)
+							thread_add_root (thread, OBJ_ADDR (objdiff), MONO_PROFILER_GC_ROOT_MISC, 0);
+					}
+				} else {
+					if (ctx->data_version > 12) {
+						uint64_t tdiff = decode_uleb128 (p + 1, &p);
+						LOG_TIME (time_base, tdiff);
+						time_base += tdiff;
+						num = decode_uleb128 (p, &p);
+					} else
+						num = decode_uleb128 (p + 1, &p);
+					uintptr_t gc_num G_GNUC_UNUSED = decode_uleb128 (p, &p);
+					int i;
+					for (i = 0; i < num; ++i) {
+						intptr_t objdiff = decode_sleb128 (p, &p);
+						int root_type;
+						if (ctx->data_version == 13)
+							root_type = *p++;
+						else
+							root_type = decode_uleb128 (p, &p);
+						/* we just discard the extra info for now */
+						uintptr_t extra_info = decode_uleb128 (p, &p);
+						if (debug)
+							fprintf (outfile, "object %p is a %s root\n", (void*)OBJ_ADDR (objdiff), get_root_name (root_type));
+						if (collect_traces)
+							thread_add_root (thread, OBJ_ADDR (objdiff), root_type, extra_info);
+					}
 				}
+			} else if (subtype == TYPE_HEAP_ROOT_REGISTER) {
+				uint64_t tdiff = decode_uleb128 (p + 1, &p);
+				LOG_TIME (time_base, tdiff);
+				time_base += tdiff;
+
+				int64_t ptrdiff = decode_sleb128 (p, &p);
+				uint64_t size = decode_uleb128 (p, &p);
+				int type = *p++;
+				int64_t keydiff = decode_sleb128 (p, &p);
+				char *desc = (char*) p;
+				while (*p++);
+
+				if (debug)
+					fprintf (outfile, "root register address %p size %lld type %d key %p name %s\n", (void *) (ptr_base + ptrdiff), (unsigned long long) size, type, (void *) (ptr_base + keydiff), desc);
+			} else if (subtype == TYPE_HEAP_ROOT_UNREGISTER) {
+				uint64_t tdiff = decode_uleb128 (p + 1, &p);
+				LOG_TIME (time_base, tdiff);
+				time_base += tdiff;
+				int64_t ptrdiff = decode_sleb128 (p, &p);
+
+				if (debug)
+					fprintf (outfile, "root unregister address %p\n", (void *) (ptr_base + ptrdiff));
 			} else if (subtype == TYPE_HEAP_END) {
 				uint64_t tdiff = decode_uleb128 (p + 1, &p);
 				LOG_TIME (time_base, tdiff);
@@ -2734,9 +2874,13 @@ decode_buffer (ProfContext *ctx)
 			break;
 		}
 		case TYPE_MONITOR: {
-			int event = (*p >> 4) & 0x3;
 			int has_bt = *p & TYPE_MONITOR_BT;
+			int event;
+			if (ctx->data_version < 13)
+				event = (*p >> 4) & 0x3;
 			uint64_t tdiff = decode_uleb128 (p + 1, &p);
+			if (ctx->data_version > 13)
+				event = *p++;
 			intptr_t objdiff = decode_sleb128 (p, &p);
 			MethodDesc* sframes [8];
 			MethodDesc** frames = sframes;
@@ -2747,26 +2891,13 @@ decode_buffer (ProfContext *ctx)
 			record = (!thread_filter || thread_filter == thread->thread_id);
 			if (!(time_base >= time_from && time_base < time_to))
 				record = 0;
+			MonitorDesc *mdesc = lookup_monitor (OBJ_ADDR (objdiff));
 			if (event == MONO_PROFILER_MONITOR_CONTENTION) {
-				MonitorDesc *mdesc = lookup_monitor (OBJ_ADDR (objdiff));
 				if (record) {
 					monitor_contention++;
 					mdesc->contentions++;
 					thread->monitor = mdesc;
 					thread->contention_start = time_base;
-				}
-				if (has_bt) {
-					num_bt = 8;
-					frames = decode_bt (ctx, sframes, &num_bt, p, &p, ptr_base, &method_base);
-					if (!frames) {
-						fprintf (outfile, "Cannot load backtrace\n");
-						return 0;
-					}
-					if (record)
-						add_trace_methods (frames, num_bt, &mdesc->traces, 1);
-				} else {
-					if (record)
-						add_trace_thread (thread, &mdesc->traces, 1);
 				}
 			} else if (event == MONO_PROFILER_MONITOR_FAIL) {
 				if (record) {
@@ -2792,6 +2923,19 @@ decode_buffer (ProfContext *ctx)
 						thread->contention_start = 0;
 					}
 				}
+			}
+			if (has_bt) {
+				num_bt = 8;
+				frames = decode_bt (ctx, sframes, &num_bt, p, &p, ptr_base, &method_base);
+				if (!frames) {
+					fprintf (outfile, "Cannot load backtrace\n");
+					return 0;
+				}
+				if (record && event == MONO_PROFILER_MONITOR_CONTENTION)
+					add_trace_methods (frames, num_bt, &mdesc->traces, 1);
+			} else {
+				if (record)
+					add_trace_thread (thread, &mdesc->traces, 1);
 			}
 			if (debug)
 				fprintf (outfile, "monitor %s for object %p\n", monitor_ev_name (event), (void*)OBJ_ADDR (objdiff));
@@ -2820,6 +2964,8 @@ decode_buffer (ProfContext *ctx)
 				int clause_num = decode_uleb128 (p, &p);
 				int64_t ptrdiff = decode_sleb128 (p, &p);
 				method_base += ptrdiff;
+				if (ctx->data_version > 13)
+					decode_uleb128 (p, &p); // exception object
 				if (record)
 					clause_summary [clause_type]++;
 				if (debug)
@@ -2886,7 +3032,10 @@ decode_buffer (ProfContext *ctx)
 					uint64_t tdiff = decode_uleb128 (p + 1, &p);
 					LOG_TIME (time_base, tdiff);
 					time_base += tdiff;
-					sample_type = *p++;
+					if (ctx->data_version < 14)
+						sample_type = *p++;
+					else
+						sample_type = SAMPLE_CYCLES;
 					tstamp = time_base;
 				} else {
 					sample_type = decode_uleb128 (p + 1, &p);
@@ -2940,6 +3089,8 @@ decode_buffer (ProfContext *ctx)
 				/* un unmanaged binary loaded in memory */
 				uint64_t tdiff = decode_uleb128 (p + 1, &p);
 				uintptr_t addr = decode_sleb128 (p, &p);
+				if (ctx->data_version > 13)
+					addr += ptr_base;
 				uint64_t offset G_GNUC_UNUSED = decode_uleb128 (p, &p);
 				uintptr_t size = decode_uleb128 (p, &p);
 				char *name;
@@ -2972,7 +3123,7 @@ decode_buffer (ProfContext *ctx)
 					}
 					name = pstrdup ((char*)p);
 					while (*p++);
-					if (ctx->data_version > 12) {
+					if (ctx->data_version > 12 && ctx->data_version < 15) {
 						type = *p++;
 						unit = *p++;
 						variance = *p++;
@@ -3009,7 +3160,7 @@ decode_buffer (ProfContext *ctx)
 						}
 					}
 
-					if (ctx->data_version > 12)
+					if (ctx->data_version > 12 && ctx->data_version < 15)
 						type = *p++;
 					else
 						type = decode_uleb128 (p, &p);
@@ -4017,7 +4168,7 @@ flush_context (ProfContext *ctx)
 	}
 }
 
-static const char *reports = "header,jit,gc,sample,alloc,call,metadata,exception,monitor,thread,heapshot,counters,coverage";
+static const char *reports = "header,jit,gc,sample,alloc,call,metadata,exception,monitor,thread,domain,context,heapshot,counters,coverage";
 
 static const char*
 match_option (const char *p, const char *opt)

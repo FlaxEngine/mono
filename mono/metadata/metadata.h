@@ -237,6 +237,7 @@ MONO_API uint32_t mono_metadata_typedef_from_method (MonoImage *meta, uint32_t t
 MONO_API uint32_t mono_metadata_nested_in_typedef   (MonoImage *meta, uint32_t table_index);
 MONO_API uint32_t mono_metadata_nesting_typedef     (MonoImage *meta, uint32_t table_index, uint32_t start_index);
 
+MONO_RT_EXTERNAL_ONLY
 MONO_API MonoClass** mono_metadata_interfaces_from_typedef (MonoImage *meta, uint32_t table_index, unsigned int *count);
 
 MONO_API uint32_t     mono_metadata_events_from_typedef     (MonoImage *meta, uint32_t table_index, unsigned int *end_idx);
@@ -338,6 +339,10 @@ mono_type_is_byref       (MonoType *type);
 MONO_API int
 mono_type_get_type       (MonoType *type);
 
+// Checks if type or any of the subtypes (generic arguments, etc.) comes from the given assembly
+MONO_API mono_bool
+mono_type_is_from_assembly(MonoType *type, MonoAssembly *assembly);
+
 /* For MONO_TYPE_FNPTR */
 MONO_API MonoMethodSignature*
 mono_type_get_signature  (MonoType *type);
@@ -413,6 +418,7 @@ MONO_API MonoType      *mono_metadata_parse_field_type  (MonoImage      *m,
 		                                short            field_flags,
 						const char      *ptr,
 						const char      **rptr);
+MONO_RT_EXTERNAL_ONLY
 MONO_API MonoType      *mono_type_create_from_typespec  (MonoImage        *image, 
 					        uint32_t           type_spec);
 MONO_API void           mono_metadata_free_type         (MonoType        *type);
@@ -435,6 +441,7 @@ MONO_RT_EXTERNAL_ONLY
 MONO_API MonoMethodSignature  *mono_metadata_parse_signature (MonoImage *image, 
 						     uint32_t    token);
 
+MONO_RT_EXTERNAL_ONLY
 MONO_API MonoMethodSignature  *mono_metadata_parse_method_signature (MonoImage            *m,
                                                             int                    def,
                                                             const char            *ptr,

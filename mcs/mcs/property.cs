@@ -680,6 +680,10 @@ namespace Mono.CSharp
 				Module.PredefinedAttributes.Dynamic.EmitAttribute (PropertyBuilder, member_type, Location);
 			}
 
+			if (member_type.HasNamedTupleElement) {
+				Module.PredefinedAttributes.TupleElementNames.EmitAttribute (PropertyBuilder, member_type, Location);
+			}
+
 			ConstraintChecker.Check (this, member_type, type_expr.Location);
 
 			first.Emit (Parent);
@@ -873,6 +877,17 @@ namespace Mono.CSharp
 					Report.Error (8051, Location, "Auto-implemented property `{0}' must have get accessor",
 						GetSignatureForError ());
 					return false;
+				}
+
+				if (MemberType.Kind == MemberKind.ByRef) {
+					Report.Error (8145, Location, "Auto-implemented property `{0}' cannot return by reference",
+						GetSignatureForError ());
+					return false;
+				}
+
+				if ((Parent.PartialContainer.ModFlags & Modifiers.READONLY) != 0 && Set != null && !IsStatic) {
+					Report.Error (8341, Location, "Auto-implemented instance property `{0}' in readonly structs must be readonly",
+						GetSignatureForError ());
 				}
 
 				if (Compiler.Settings.Version < LanguageVersion.V_3 && Initializer == null)
@@ -1180,6 +1195,16 @@ namespace Mono.CSharp
 			}
 
 			base.ApplyAttributeBuilder (a, ctor, cdata, pa);
+		}
+
+		protected override void DoMemberTypeIndependentChecks ()
+		{
+			if ((Parent.PartialContainer.ModFlags & Modifiers.READONLY) != 0 && (ModFlags & Modifiers.STATIC) == 0) {
+				Report.Error (8342, Location, "`{0}': Field-like instance events are not allowed in readonly structs",
+					GetSignatureForError ());
+			}
+
+			base.DoMemberTypeIndependentChecks ();
 		}
 
 		public override bool Define()

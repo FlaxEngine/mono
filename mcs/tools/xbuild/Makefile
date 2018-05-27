@@ -14,11 +14,7 @@ include ../../build/executable.make
 XBUILD_DIR=.
 include $(XBUILD_DIR)/xbuild_test.make
 
-ifeq (4.0, $(FRAMEWORK_VERSION))
-install-local: xbuild-net4-fail
-else
 install-local: install-extras
-endif
 
 PORTABLE_TARGETS_SRC:=data/Portable/Targets
 PCL5_FX_SRC:=data/Portable/Frameworks/v5.0
@@ -29,6 +25,7 @@ PCL5_FX_DIR=$(mono_libdir)/mono/xbuild-frameworks/.NETPortable/v5.0
 VS_TARGETS_DIR = $(mono_libdir)/mono/xbuild/Microsoft/VisualStudio
 PORTABLE_TARGETS_DIR = $(mono_libdir)/mono/xbuild/Microsoft/Portable
 NUGET_BUILDTASKS_TARGETS_DIR = $(mono_libdir)/mono/xbuild/Microsoft/NuGet
+MSBUILD_EXTENSIONS_15_DIR=$(mono_libdir)/mono/xbuild/15.0
 
 ifeq (14.0, $(XBUILD_VERSION))
 install-extras: install-versioned-files install-global-files
@@ -82,6 +79,8 @@ install-frameworks:
 	$(INSTALL_DATA) frameworks/net_4.6.2.xml $(DESTDIR)$(NETFRAMEWORK_DIR)/v4.6.2/RedistList/FrameworkList.xml
 	$(MKINSTALLDIRS) $(DESTDIR)$(NETFRAMEWORK_DIR)/v4.7/RedistList
 	$(INSTALL_DATA) frameworks/net_4.7.xml $(DESTDIR)$(NETFRAMEWORK_DIR)/v4.7/RedistList/FrameworkList.xml
+	$(MKINSTALLDIRS) $(DESTDIR)$(NETFRAMEWORK_DIR)/v4.7.1/RedistList
+	$(INSTALL_DATA) frameworks/net_4.7.1.xml $(DESTDIR)$(NETFRAMEWORK_DIR)/v4.7.1/RedistList/FrameworkList.xml
 
 install-pcl-targets:
 	$(MKINSTALLDIRS) $(DESTDIR)$(PORTABLE_TARGETS_DIR)
@@ -105,8 +104,12 @@ NUGET_BUILDTASKS_REPO_DIR=$(topdir)/../external/nuget-buildtasks
 
 install-nuget-targets:
 	$(MKINSTALLDIRS) $(DESTDIR)$(NUGET_BUILDTASKS_TARGETS_DIR)
+	$(MKINSTALLDIRS) $(DESTDIR)$(MSBUILD_EXTENSIONS_15_DIR)/Imports/Microsoft.Common.props/ImportBefore
+	$(MKINSTALLDIRS) $(DESTDIR)$(MSBUILD_EXTENSIONS_15_DIR)/Microsoft.Common.targets/ImportAfter
 	$(INSTALL_DATA) $(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/Microsoft.NuGet.targets $(DESTDIR)$(NUGET_BUILDTASKS_TARGETS_DIR)
 	$(INSTALL_DATA) $(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/Microsoft.NuGet.props $(DESTDIR)$(NUGET_BUILDTASKS_TARGETS_DIR)
+	$(INSTALL_DATA) $(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/ImportBeforeAfter/Microsoft.NuGet.ImportBefore.props $(DESTDIR)$(MSBUILD_EXTENSIONS_15_DIR)/Imports/Microsoft.Common.props/ImportBefore
+	$(INSTALL_DATA) $(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/ImportBeforeAfter/Microsoft.NuGet.ImportAfter.targets $(DESTDIR)$(MSBUILD_EXTENSIONS_15_DIR)/Microsoft.Common.targets/ImportAfter
 
 install-nuget-imports:
 ifeq (14.0, $(XBUILD_VERSION))
@@ -186,6 +189,7 @@ EXTRA_DISTFILES = \
 	frameworks/net_4.6.1.xml \
 	frameworks/net_4.6.2.xml \
 	frameworks/net_4.7.xml \
+	frameworks/net_4.7.1.xml \
 	targets/Microsoft.WebApplication.targets	\
 	$(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/ImportBeforeAfter/Microsoft.NuGet.ImportBefore.props	\
 	$(NUGET_BUILDTASKS_REPO_DIR)/src/Microsoft.NuGet.Build.Tasks/ImportBeforeAfter/Microsoft.NuGet.ImportAfter.targets	\

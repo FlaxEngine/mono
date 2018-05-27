@@ -360,7 +360,7 @@ long_conv_to_ovf_i4_2: dest:i src1:i src2:i len:36
 vcall2: len:40 clob:c
 vcall2_reg: src1:i len:40 clob:c
 vcall2_membase: src1:b len:40 clob:c
-dyn_call: src1:i src2:i len:192 clob:c
+dyn_call: src1:i src2:i len:216 clob:c
 
 # This is different from the original JIT opcodes
 float_beq: len:32
@@ -440,7 +440,7 @@ long_conv_to_u2: dest:i src1:i len:4
 long_conv_to_r8: dest:f src1:i len:8
 long_conv_to_r4: dest:f src1:i len:12
 loadi8_membase: dest:i src1:b len:12
-storei8_membase_imm: dest:b  len:20
+storei8_membase_imm: dest:b len:20
 storei8_membase_reg: dest:b src1:i len:12
 long_conv_to_r_un: dest:f src1:i len:8
 arm_setfreg_r4: dest:f src1:f len:8
@@ -480,3 +480,5 @@ atomic_store_r8: dest:b src1:f len:24
 
 generic_class_init: src1:a len:44 clob:c
 gc_safe_point: src1:i len:12 clob:c
+
+fill_prof_call_ctx: src1:i len:128

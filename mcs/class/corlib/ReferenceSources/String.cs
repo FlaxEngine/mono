@@ -41,11 +41,24 @@ namespace System
 {
 	partial class String
 	{
+		[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		public extern String (ReadOnlySpan<char> value);
+
 		public int Length {
 			get {
 				return m_stringLength;
 			}
 		}
+
+		public unsafe static implicit operator ReadOnlySpan<char> (String value)
+		{
+			if (value == null)
+				return default;
+
+			fixed (void* start = &value.m_firstChar)
+				return new ReadOnlySpan<char> (start, value.Length);
+		}
+
 
 		internal static unsafe int CompareOrdinalUnchecked (String strA, int indexA, int lenA, String strB, int indexB, int lenB)
 		{
@@ -341,7 +354,7 @@ namespace System
 				throw new ArgumentOutOfRangeException("indexB", Environment.GetResourceString("ArgumentOutOfRange_Index"));
 
 			return CompareOrdinalUnchecked (strA, indexA, count, strB, indexB, count);
-        }
+		}
 
 		unsafe String ReplaceInternal (char oldChar, char newChar)
 		{
@@ -488,7 +501,7 @@ namespace System
 					while (p < end) {
 						*p++ = paddingChar;
 					}
-	 			} else {
+				} else {
 					char *p = dest;
 					char *end = p + totalWidth - m_stringLength;
 					while (p < end) {
@@ -742,6 +755,29 @@ namespace System
 
 			// GetString () is called even when length == 0
 			return enc.GetString (bytes);
+		}
+
+		unsafe String CreateString (ReadOnlySpan<char> value)
+		{
+			if (value.Length == 0)
+				return Empty;
+
+			String result = FastAllocateString (value.Length);
+			fixed (char *dest = result, ptr = &value.DangerousGetPinnableReference ())
+				wstrcpy (dest, ptr, value.Length);
+
+			return result;
+		}
+
+		[IndexerName ("Chars")]
+		public char this [int index] {
+			[IntrinsicAttribute]
+			get {
+				if ((uint)index >= m_stringLength)
+					ThrowHelper.ThrowIndexOutOfRangeException ();
+
+				return Unsafe.Add (ref m_firstChar, index);
+			}
 		}
 	}
 }

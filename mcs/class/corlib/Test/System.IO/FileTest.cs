@@ -25,13 +25,16 @@ namespace MonoTests.System.IO
 	public class FileTest
 	{
 		CultureInfo old_culture;
-		static string TempFolder = Path.Combine (Path.GetTempPath (), "MonoTests.System.IO.Tests");
+		string tmpFolder;
 
 		[SetUp]
 		public void SetUp ()
 		{
-			DeleteDirectory (TempFolder);
-			Directory.CreateDirectory (TempFolder);
+			tmpFolder = Path.GetTempFileName ();
+			if (File.Exists (tmpFolder))
+				File.Delete (tmpFolder);
+			DeleteDirectory (tmpFolder);
+			Directory.CreateDirectory (tmpFolder);
 			old_culture = Thread.CurrentThread.CurrentCulture;
 			Thread.CurrentThread.CurrentCulture = new CultureInfo ("en-US", false);
 		}
@@ -39,7 +42,7 @@ namespace MonoTests.System.IO
 		[TearDown]
 		public void TearDown ()
 		{
-			DeleteDirectory (TempFolder);
+			DeleteDirectory (tmpFolder);
 			Thread.CurrentThread.CurrentCulture = old_culture;
 		}
 
@@ -65,7 +68,7 @@ namespace MonoTests.System.IO
 		public void TestExists ()
 		{
 			FileStream s = null;
-			string path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			try {
 				Assert.IsFalse (File.Exists (null), "#1");
 				Assert.IsFalse (File.Exists (string.Empty), "#2");
@@ -74,7 +77,7 @@ namespace MonoTests.System.IO
 				s = File.Create (path);
 				s.Close ();
 				Assert.IsTrue (File.Exists (path), "#4");
-				Assert.IsFalse (File.Exists (TempFolder + Path.DirectorySeparatorChar + "doesnotexist"), "#5");
+				Assert.IsFalse (File.Exists (tmpFolder + Path.DirectorySeparatorChar + "doesnotexist"), "#5");
 			} finally {
 				if (s != null)
 					s.Close ();
@@ -112,7 +115,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Create_Path_Directory ()
 		{
-			string path = Path.Combine (TempFolder, "foo");
+			string path = Path.Combine (tmpFolder, "foo");
 			Directory.CreateDirectory (path);
 			try {
 				File.Create (path);
@@ -146,7 +149,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Create_Path_ReadOnly ()
 		{
-			string path = Path.Combine (TempFolder, "foo");
+			string path = Path.Combine (tmpFolder, "foo");
 			File.Create (path).Close ();
 			File.SetAttributes (path, FileAttributes.ReadOnly);
 			try {
@@ -182,7 +185,7 @@ namespace MonoTests.System.IO
 		public void Create_Directory_DoesNotExist ()
 		{
 			FileStream stream = null;
-			string path = TempFolder + Path.DirectorySeparatorChar + "directory_does_not_exist" + Path.DirectorySeparatorChar + "foo";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "directory_does_not_exist" + Path.DirectorySeparatorChar + "foo";
 			
 			try {
 				stream = File.Create (path);
@@ -207,7 +210,7 @@ namespace MonoTests.System.IO
 			string path = null;
 
 			/* positive test: create resources/foo */
-			path = TempFolder + Path.DirectorySeparatorChar + "foo";
+			path = tmpFolder + Path.DirectorySeparatorChar + "foo";
 			try {
 
 				stream = File.Create (path);
@@ -222,7 +225,7 @@ namespace MonoTests.System.IO
 			stream = null;
 
 			/* positive test: repeat test above again to test for overwriting file */
-			path = TempFolder + Path.DirectorySeparatorChar + "foo";
+			path = tmpFolder + Path.DirectorySeparatorChar + "foo";
 			try {
 				stream = File.Create (path);
 				Assert.IsTrue (File.Exists (path), "#2");
@@ -339,8 +342,8 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Copy_DestFileName_AlreadyExists ()
 		{
-			string source = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
-			string dest = TempFolder + Path.DirectorySeparatorChar + "bar";
+			string source = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string dest = tmpFolder + Path.DirectorySeparatorChar + "bar";
 			DeleteFile (source);
 			DeleteFile (dest);
 			try {
@@ -365,7 +368,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Copy_SourceFileName_DestFileName_Same ()
 		{
-			string source = TempFolder + Path.DirectorySeparatorChar + "SameFile.txt";
+			string source = tmpFolder + Path.DirectorySeparatorChar + "SameFile.txt";
 			DeleteFile (source);
 			try {
 				// new empty file
@@ -386,8 +389,8 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Copy ()
 		{
-			string path1 = TempFolder + Path.DirectorySeparatorChar + "bar";
-			string path2 = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path1 = tmpFolder + Path.DirectorySeparatorChar + "bar";
+			string path2 = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			/* positive test: copy resources/AFile.txt to resources/bar */
 			try {
 				DeleteFile (path1);
@@ -455,7 +458,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Delete_Directory_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "directory_does_not_exist" + Path.DirectorySeparatorChar + "foo";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "directory_does_not_exist" + Path.DirectorySeparatorChar + "foo";
 			if (Directory.Exists (path))
 				Directory.Delete (path, true);
 
@@ -474,7 +477,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Delete ()
 		{
-			string foopath = TempFolder + Path.DirectorySeparatorChar + "foo";
+			string foopath = tmpFolder + Path.DirectorySeparatorChar + "foo";
 			DeleteFile (foopath);
 			try {
 				File.Create (foopath).Close ();
@@ -490,7 +493,7 @@ namespace MonoTests.System.IO
 		[Category ("NotWorking")]
 		public void Delete_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "DeleteOpenStreamException";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "DeleteOpenStreamException";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -520,7 +523,7 @@ namespace MonoTests.System.IO
 			if (RunningOnUnix)
 				Assert.Ignore ("ReadOnly files can be deleted on unix since fdef50957f508627928c7876a905d5584da45748.");
 
-			string path = TempFolder + Path.DirectorySeparatorChar + "DeleteReadOnly";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "DeleteReadOnly";
 			DeleteFile (path);
 			try {
 				File.Create (path).Close ();
@@ -533,6 +536,12 @@ namespace MonoTests.System.IO
 		}
 
 		[Test]
+		public void Delete_NonExisting_NoException ()
+		{
+			File.Delete (Path.Combine (Directory.GetDirectoryRoot (Directory.GetCurrentDirectory ()), "monononexistingfile.dat"));
+		}
+
+		[Test]
 		public void GetAttributes_Archive ()
 		{
 			if (RunningOnUnix)
@@ -540,7 +549,7 @@ namespace MonoTests.System.IO
 
 			FileAttributes attrs;
 
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			File.Create (path).Close ();
 
 			attrs = File.GetAttributes (path);
@@ -559,7 +568,7 @@ namespace MonoTests.System.IO
 			if (RunningOnUnix)
 				Assert.Ignore ("bug #325181: FileAttributes.Archive has no effect on Unix.");
 
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			File.Create (path).Close ();
 
 			FileAttributes attrs = File.GetAttributes (path);
@@ -575,7 +584,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetAttributes_Default_Directory ()
 		{
-			FileAttributes attrs = File.GetAttributes (TempFolder);
+			FileAttributes attrs = File.GetAttributes (tmpFolder);
 
 			Assert.IsFalse ((attrs & FileAttributes.Archive) != 0, "#1");
 			Assert.IsTrue ((attrs & FileAttributes.Directory) != 0, "#2");
@@ -588,16 +597,16 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetAttributes_Directory ()
 		{
-			FileAttributes attrs = File.GetAttributes (TempFolder);
+			FileAttributes attrs = File.GetAttributes (tmpFolder);
 
 			Assert.IsTrue ((attrs & FileAttributes.Directory) != 0, "#1");
 
 			attrs &= ~FileAttributes.Directory;
-			File.SetAttributes (TempFolder, attrs);
+			File.SetAttributes (tmpFolder, attrs);
 
 			Assert.IsFalse ((attrs & FileAttributes.Directory) != 0, "#2");
 
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			File.Create (path).Close ();
 
 			attrs = File.GetAttributes (path);
@@ -612,7 +621,7 @@ namespace MonoTests.System.IO
 		{
 			FileAttributes attrs;
 
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			File.Create (path).Close ();
 
 			attrs = File.GetAttributes (path);
@@ -637,7 +646,7 @@ namespace MonoTests.System.IO
 
 			FileAttributes attrs;
 
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			File.Create (path).Close ();
 
 			attrs = File.GetAttributes (path);
@@ -653,7 +662,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetAttributes_Path_DoesNotExist ()
 		{
-			string path = Path.Combine (TempFolder, "GetAttributes.tmp");
+			string path = Path.Combine (tmpFolder, "GetAttributes.tmp");
 			try {
 				File.GetAttributes (path);
 				Assert.Fail ("#1");
@@ -785,7 +794,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Move_SourceFileName_DoesNotExist ()
 		{
-			string file = TempFolder + Path.DirectorySeparatorChar + "doesnotexist";
+			string file = tmpFolder + Path.DirectorySeparatorChar + "doesnotexist";
 			DeleteFile (file);
 			try {
 				File.Move (file, "b");
@@ -801,8 +810,8 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Move_DestFileName_DirectoryDoesNotExist ()
 		{
-			string sourceFile = TempFolder + Path.DirectorySeparatorChar + "foo";
-			string destFile = Path.Combine (Path.Combine (TempFolder, "doesnotexist"), "b");
+			string sourceFile = tmpFolder + Path.DirectorySeparatorChar + "foo";
+			string destFile = Path.Combine (Path.Combine (tmpFolder, "doesnotexist"), "b");
 			DeleteFile (sourceFile);
 			try {
 				File.Create (sourceFile).Close ();
@@ -824,13 +833,13 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Move_DestFileName_AlreadyExists ()
 		{
-			string sourceFile = TempFolder + Path.DirectorySeparatorChar + "foo";
+			string sourceFile = tmpFolder + Path.DirectorySeparatorChar + "foo";
 			string destFile;
 
 			// move to same directory
 			File.Create (sourceFile).Close ();
 			try {
-				File.Move (sourceFile, TempFolder);
+				File.Move (sourceFile, tmpFolder);
 				Assert.Fail ("#A1");
 			} catch (IOException ex) {
 				// Cannot create a file when that file already exists
@@ -838,14 +847,14 @@ namespace MonoTests.System.IO
 				Assert.IsNull (ex.InnerException, "#A3");
 				Assert.IsNotNull (ex.Message, "#A4");
 				Assert.IsFalse (ex.Message.IndexOf (sourceFile) != -1, "#A5");
-				Assert.IsFalse (ex.Message.IndexOf (TempFolder) != -1, "#A6");
+				Assert.IsFalse (ex.Message.IndexOf (tmpFolder) != -1, "#A6");
 			} finally {
 				DeleteFile (sourceFile);
 			}
 
 			// move to exist file
 			File.Create (sourceFile).Close ();
-			destFile = TempFolder + Path.DirectorySeparatorChar + "bar";
+			destFile = tmpFolder + Path.DirectorySeparatorChar + "bar";
 			File.Create (destFile).Close ();
 			try {
 				File.Move (sourceFile, destFile);
@@ -864,7 +873,7 @@ namespace MonoTests.System.IO
 
 			// move to existing directory
 			File.Create (sourceFile).Close ();
-			destFile = TempFolder + Path.DirectorySeparatorChar + "bar";
+			destFile = tmpFolder + Path.DirectorySeparatorChar + "bar";
 			Directory.CreateDirectory (destFile);
 			try {
 				File.Move (sourceFile, destFile);
@@ -885,8 +894,8 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Move ()
 		{
-			string bar = TempFolder + Path.DirectorySeparatorChar + "bar";
-			string baz = TempFolder + Path.DirectorySeparatorChar + "baz";
+			string bar = tmpFolder + Path.DirectorySeparatorChar + "bar";
+			string baz = tmpFolder + Path.DirectorySeparatorChar + "baz";
 			if (!File.Exists (bar)) {
 				FileStream f = File.Create(bar);
 				f.Close();
@@ -898,8 +907,8 @@ namespace MonoTests.System.IO
 			Assert.IsTrue (File.Exists (baz), "#3");
 
 			// Test moving of directories
-			string dir = Path.Combine (TempFolder, "dir");
-			string dir2 = Path.Combine (TempFolder, "dir2");
+			string dir = Path.Combine (tmpFolder, "dir");
+			string dir2 = Path.Combine (tmpFolder, "dir2");
 			string dir_foo = Path.Combine (dir, "foo");
 			string dir2_foo = Path.Combine (dir2, "foo");
 
@@ -959,7 +968,7 @@ namespace MonoTests.System.IO
 			string path = null;
 			FileStream stream = null;
 
-			path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			try {
 				if (!File.Exists (path))
 					stream = File.Create (path);
@@ -1003,7 +1012,7 @@ namespace MonoTests.System.IO
 			stream = null;
 
 			/* Exception tests */
-			path = TempFolder + Path.DirectorySeparatorChar + "filedoesnotexist";
+			path = tmpFolder + Path.DirectorySeparatorChar + "filedoesnotexist";
 			try {
 				stream = File.Open (path, FileMode.Open);
 				Assert.Fail ("#D1");
@@ -1022,10 +1031,10 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Open_CreateNewMode_ReadAccess ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			FileStream stream = null;
 			try {
-				stream = File.Open (TempFolder + Path.DirectorySeparatorChar + "AFile.txt", FileMode.CreateNew, FileAccess.Read);
+				stream = File.Open (tmpFolder + Path.DirectorySeparatorChar + "AFile.txt", FileMode.CreateNew, FileAccess.Read);
 				Assert.Fail ("#1");
 			} catch (ArgumentException ex) {
 				// Combining FileMode: CreateNew with FileAccess: Read is invalid
@@ -1043,7 +1052,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void Open_AppendMode_ReadAccess ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			FileStream s = null;
 			if (!File.Exists (path))
 				File.Create (path).Close ();
@@ -1066,7 +1075,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void OpenRead ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			if (!File.Exists (path))
 				File.Create (path).Close ();
 			FileStream stream = null;
@@ -1086,7 +1095,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void OpenWrite ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "AFile.txt";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "AFile.txt";
 			if (!File.Exists (path))
 				File.Create (path).Close ();
 			FileStream stream = null;
@@ -1107,7 +1116,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void TestGetCreationTime ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "baz";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "baz";
 			DeleteFile (path);
 
 			try {
@@ -1164,7 +1173,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void LastAccessTime ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "lastAccessTime";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "lastAccessTime";
 			if (File.Exists (path))
 				File.Delete (path);
 			FileStream stream = null;
@@ -1211,7 +1220,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void LastWriteTime ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "lastWriteTime";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "lastWriteTime";
 			if (File.Exists (path))
 				File.Delete (path);
 			FileStream stream = null;
@@ -1255,6 +1264,57 @@ namespace MonoTests.System.IO
 			}
 		}
 
+		/* regression test for https://github.com/mono/mono/issues/7646 */
+		[Test]
+		public void LastWriteTimeSubMs ()
+		{
+			string path = tmpFolder + Path.DirectorySeparatorChar + "lastWriteTimeSubMs";
+			if (File.Exists (path))
+				File.Delete (path);
+			try {
+				var fmt = "HH:mm:ss:fffffff";
+				for (var i = 0; i < 200; i++) {
+					File.WriteAllText (path, "");
+					var untouched = File.GetLastWriteTimeUtc (path);
+					File.SetLastWriteTimeUtc (path, DateTime.UtcNow);
+					var touched = File.GetLastWriteTimeUtc (path);
+
+					Assert.IsTrue (touched >= untouched, $"Iteration #{i} failed, untouched: {untouched.ToString (fmt)} touched: {touched.ToString (fmt)}");
+				}
+			} finally {
+				DeleteFile (path);
+			}
+		}
+
+		/* regression test from https://github.com/xamarin/xamarin-macios/issues/3929 */
+		[Test]
+		public void LastWriteTimeSubMsCopy ()
+		{
+			string path = tmpFolder + Path.DirectorySeparatorChar + "lastWriteTimeSubMs";
+			if (File.Exists (path))
+				File.Delete (path);
+
+			string path_copy = tmpFolder + Path.DirectorySeparatorChar + "LastWriteTimeSubMs_copy";
+			if (File.Exists (path_copy))
+				File.Delete (path_copy);
+
+			try {
+				var fmt = "HH:mm:ss:fffffff";
+				for (var i = 0; i < 200; i++) {
+					File.WriteAllText (path, "");
+					var untouched = File.GetLastWriteTimeUtc (path);
+					File.Copy (path, path_copy);
+					var copy_touched = File.GetLastWriteTimeUtc (path_copy);
+
+					Assert.IsTrue (copy_touched >= untouched, $"Iteration #{i} failed, untouched: {untouched.ToString (fmt)} copy_touched: {copy_touched.ToString (fmt)}");
+					File.Delete (path_copy);
+				}
+			} finally {
+				DeleteFile (path);
+				DeleteFile (path_copy);
+			}
+		}
+
 		[Test]
 		public void GetCreationTime_Path_Null ()
 		{
@@ -1287,7 +1347,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetCreationTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetCreationTimeException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetCreationTimeException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetCreationTime (path);
@@ -1362,7 +1422,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetCreationTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetCreationTimeUtcException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetCreationTimeUtcException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetCreationTimeUtc (path);
@@ -1436,7 +1496,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetLastAccessTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetLastAccessTime (path);
@@ -1511,7 +1571,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetLastAccessTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeUtcException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeUtcException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetLastAccessTimeUtc (path);
@@ -1585,7 +1645,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetLastWriteTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeUtcException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetLastAccessTimeUtcException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetLastWriteTime (path);
@@ -1660,7 +1720,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void GetLastWriteTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "GetLastWriteTimeUtcException3";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "GetLastWriteTimeUtcException3";
 			DeleteFile (path);
 
 			DateTime time = File.GetLastWriteTimeUtc (path);
@@ -1705,7 +1765,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void FileStreamClose ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "FileStreamClose";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "FileStreamClose";
 			FileStream stream = null;
 			try {
 				stream = File.Create (path);
@@ -1786,7 +1846,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetCreationTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetCreationTimeFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetCreationTimeFileNotFoundException1";
 			DeleteFile (path);
 			
 			try {
@@ -1804,7 +1864,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetCreationTimeArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetCreationTimeArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetCreationTimeArgumentOutOfRangeException1";
 //			FileStream stream = null;
 //			DeleteFile (path);
 //			try {
@@ -1821,7 +1881,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetCreationTime_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "CreationTimeIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "CreationTimeIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -1910,7 +1970,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetCreationTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcFileNotFoundException1";
 			DeleteFile (path);
 
 			try {
@@ -1928,7 +1988,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetCreationTimeUtcArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcArgumentOutOfRangeException1";
 //			DeleteFile (path);
 //			FileStream stream = null;
 //			try {
@@ -1945,7 +2005,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetCreationTimeUtc_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetCreationTimeUtcIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -2036,7 +2096,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastAccessTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeFileNotFoundException1";
 			DeleteFile (path);
 
 			try {
@@ -2054,7 +2114,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetLastAccessTimeArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastTimeArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastTimeArgumentOutOfRangeException1";
 //			DeleteFile (path);
 //			FileStream stream = null;
 //			try {
@@ -2071,7 +2131,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastAccessTime_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "LastAccessIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "LastAccessIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -2160,7 +2220,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastAccessTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcFileNotFoundException1";
 			DeleteFile (path);
 
 			try {
@@ -2178,7 +2238,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetLastAccessTimeUtcArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcArgumentOutOfRangeException1";
 //			DeleteFile (path);
 //			FileStream stream = null;
 //			try {
@@ -2195,7 +2255,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastAccessTimeUtc_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastAccessTimeUtcIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -2286,7 +2346,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastWriteTime_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeFileNotFoundException1";
 			DeleteFile (path);
 
 			try {
@@ -2304,7 +2364,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetLastWriteTimeArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeArgumentOutOfRangeException1";
 //			DeleteFile (path);
 //			FileStream stream = null;
 //			try {
@@ -2321,7 +2381,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastWriteTime_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "LastWriteTimeIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "LastWriteTimeIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -2410,7 +2470,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastWriteTimeUtc_Path_DoesNotExist ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcFileNotFoundException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcFileNotFoundException1";
 			DeleteFile (path);
 
 			try {
@@ -2428,7 +2488,7 @@ namespace MonoTests.System.IO
 //		[ExpectedException(typeof (ArgumentOutOfRangeException))]
 //		public void SetLastWriteTimeUtcArgumentOutOfRangeException1 ()
 //		{
-//			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcArgumentOutOfRangeException1";
+//			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcArgumentOutOfRangeException1";
 //			DeleteFile (path);
 //			FileStream stream = null;
 //			try {
@@ -2445,7 +2505,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void SetLastWriteTimeUtc_FileLock ()
 		{
-			string path = TempFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcIOException1";
+			string path = tmpFolder + Path.DirectorySeparatorChar + "SetLastWriteTimeUtcIOException1";
 			DeleteFile (path);
 			FileStream stream = null;
 			try {
@@ -2574,7 +2634,7 @@ namespace MonoTests.System.IO
 		[Test]
 		public void ReplaceTest ()
 		{
-			string tmp = Path.Combine (TempFolder, "ReplaceTest");
+			string tmp = Path.Combine (tmpFolder, "ReplaceTest");
 			Directory.CreateDirectory (tmp);
 			string origFile = Path.Combine (tmp, "origFile");
 			string replaceFile = Path.Combine (tmp, "replaceFile");
@@ -2688,6 +2748,9 @@ namespace MonoTests.System.IO
 		public static extern int symlink (string oldpath, string newpath);
 
 		[Test]
+#if __TVOS__
+		[Ignore ("See bug #59239")]
+#endif
 		public void SymLinkLoop ()
 		{
 			if (!RunningOnUnix)
@@ -2703,8 +2766,10 @@ namespace MonoTests.System.IO
 			File.Delete (path2);
 
 			try {
-				symlink (path1, path2);
-				symlink (path2, path1);
+				if (symlink (path1, path2) != 0)
+					Assert.Fail ("symlink #1 failed with errno={0}", Marshal.GetLastWin32Error ());
+				if (symlink (path2, path1) != 0)
+					Assert.Fail ("symlink #2 failed with errno={0}", Marshal.GetLastWin32Error ());
 
 				Assert.IsTrue (File.Exists (path1), "File.Exists must return true for path1 symlink loop");
 				Assert.IsTrue (File.Exists (path2), "File.Exists must return true for path2 symlink loop");

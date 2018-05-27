@@ -411,6 +411,10 @@ struct _MonoImage {
 	MonoGenericContainer *anonymous_generic_class_container;
 	MonoGenericContainer *anonymous_generic_method_container;
 
+	gboolean weak_fields_inited;
+	/* Contains 1 based indexes */
+	GHashTable *weak_field_indexes;
+
 	/*
 	 * No other runtime locks must be taken while holding this lock.
 	 * It's meant to be used only to mutate and query structures part of this image.
@@ -432,6 +436,9 @@ typedef struct {
 	// Generic-specific caches
 	GHashTable *ginst_cache, *gmethod_cache, *gsignature_cache;
 	MonoConcurrentHashTable *gclass_cache;
+
+	/* mirror caches of ones already on MonoImage. These ones contain generics */
+	GHashTable *szarray_cache, *array_cache, *ptr_cache;
 
 	MonoWrapperCaches wrapper_caches;
 
@@ -569,8 +576,11 @@ struct _MonoMethodHeader {
 };
 
 typedef struct {
+	const unsigned char *code;
 	guint32      code_size;
+	guint16      max_stack;
 	gboolean     has_clauses;
+	gboolean     has_locals;
 } MonoMethodHeaderSummary;
 
 #define MONO_SIZEOF_METHOD_HEADER (sizeof (struct _MonoMethodHeader) - MONO_ZERO_LEN_ARRAY * SIZEOF_VOID_P)
@@ -934,7 +944,7 @@ mono_image_set_description (MonoImageSet *);
 MonoImageSet *
 mono_find_image_set_owner (void *ptr);
 
-void
+MONO_API void
 mono_loader_register_module (const char *name, MonoDl *module);
 
 gboolean
@@ -948,6 +958,12 @@ mono_loader_set_strict_strong_names (gboolean enabled);
 
 gboolean
 mono_loader_get_strict_strong_names (void);
+
+char*
+mono_signature_get_managed_fmt_string (MonoMethodSignature *sig);
+
+gboolean
+mono_type_in_image (MonoType *type, MonoImage *image);
 
 #endif /* __MONO_METADATA_INTERNALS_H__ */
 

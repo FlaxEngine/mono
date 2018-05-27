@@ -136,6 +136,9 @@ COPY_OR_MARK_FUNCTION_NAME (GCObject **ptr, GCObject *obj, SgenGrayQueue *queue)
 		SgenDescriptor desc;
 		int type;
 
+		if (vtable_word == 0)
+			return TRUE;
+
 		HEAVY_STAT (++stat_optimized_copy_major);
 
 #ifdef COPY_OR_MARK_WITH_EVACUATION
@@ -339,6 +342,7 @@ DRAIN_GRAY_STACK_FUNCTION_NAME (SgenGrayQueue *queue)
 #else
 		GRAY_OBJECT_DEQUEUE_SERIAL (queue, &obj, &desc);
 #endif
+		//if (!obj || (*(mword*)obj) == 0)
 		if (!obj)
 			return TRUE;
 

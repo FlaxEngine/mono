@@ -14,7 +14,7 @@
 #include "mono/metadata/w32file-win32-internals.h"
 
 gboolean
-mono_w32file_move (gunichar2 *path, gunichar2 *dest, gint32 *error)
+mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 {
 	gboolean result = FALSE;
 	MONO_ENTER_GC_SAFE;
@@ -29,13 +29,33 @@ mono_w32file_move (gunichar2 *path, gunichar2 *dest, gint32 *error)
 }
 
 gboolean
-mono_w32file_replace (gunichar2 *destinationFileName, gunichar2 *sourceFileName,
-			   gunichar2 *destinationBackupFileName, guint32 flags, gint32 *error)
+mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sourceFileName,
+			   const gunichar2 *destinationBackupFileName, guint32 flags, gint32 *error)
 {
 	gboolean result = FALSE;
 	MONO_ENTER_GC_SAFE;
 
 	result = ReplaceFile (destinationFileName, sourceFileName, destinationBackupFileName, flags, NULL, NULL);
+	if (result == FALSE) {
+		*error=GetLastError ();
+	}
+
+	MONO_EXIT_GC_SAFE;
+	return result;
+}
+
+gboolean
+mono_w32file_copy (const gunichar2 *path, const gunichar2 *dest, gboolean overwrite, gint32 *error)
+{
+	gboolean						result = FALSE;
+	COPYFILE2_EXTENDED_PARAMETERS	copy_param = {0};
+
+	copy_param.dwSize = sizeof (COPYFILE2_EXTENDED_PARAMETERS);
+	copy_param.dwCopyFlags = (!overwrite) ? COPY_FILE_FAIL_IF_EXISTS : 0;
+
+	MONO_ENTER_GC_SAFE;
+
+	result = SUCCEEDED (CopyFile2 (path, dest, &copy_param));
 	if (result == FALSE) {
 		*error=GetLastError ();
 	}
@@ -101,7 +121,7 @@ mono_w32file_unlock (HANDLE handle, gint64 position, gint64 length, gint32 *erro
 HANDLE
 mono_w32file_get_console_output (void)
 {
-	MonoError mono_error;
+	ERROR_DECL_VALUE (mono_error);
 	error_init (&mono_error);
 
 	g_unsupported_api ("GetStdHandle (STD_OUTPUT_HANDLE)");
@@ -117,7 +137,7 @@ mono_w32file_get_console_output (void)
 HANDLE
 mono_w32file_get_console_input (void)
 {
-	MonoError mono_error;
+	ERROR_DECL_VALUE (mono_error);
 	error_init (&mono_error);
 
 	g_unsupported_api ("GetStdHandle (STD_INPUT_HANDLE)");
@@ -133,7 +153,7 @@ mono_w32file_get_console_input (void)
 HANDLE
 mono_w32file_get_console_error (void)
 {
-	MonoError mono_error;
+	ERROR_DECL_VALUE (mono_error);
 	error_init (&mono_error);
 
 	g_unsupported_api ("GetStdHandle (STD_ERROR_HANDLE)");

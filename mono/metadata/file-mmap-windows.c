@@ -144,6 +144,9 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 	wchar_t *w_mapName = NULL;
 	HANDLE result = NULL;
 
+	// INVALID_HANDLE_VALUE (-1) is valid, to make named shared memory,
+	// backed by physical memory / pagefile.
+
 	if (handle == INVALID_HANDLE_VALUE) {
 		if (*capacity <= 0 && mode != FILE_MODE_OPEN) {
 			*error = CAPACITY_MUST_BE_POSITIVE;
@@ -161,7 +164,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 		}
 	} else {
 		FILE_STANDARD_INFO info;
-		if (!GetFileInformationByHandleEx ((HANDLE) handle, FileStandardInfo, &info, sizeof (FILE_STANDARD_INFO))) {
+		if (!GetFileInformationByHandleEx (handle, FileStandardInfo, &info, sizeof (FILE_STANDARD_INFO))) {
 			*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 			return NULL;
 		}
@@ -176,7 +179,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 		}
 	}
 
-	w_mapName = mapName ? mono_string_to_utf16 (mapName) : NULL;
+	w_mapName = mapName ? mono_string_chars (mapName) : NULL;
 
 	if (mode == FILE_MODE_CREATE_NEW || handle != INVALID_HANDLE_VALUE) {
 #if _XBOX_ONE
@@ -258,9 +261,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 			*error = COULD_NOT_OPEN;
 		}
 	}
-	 
-	if (w_mapName)
-		g_free (w_mapName);
+
 	return result;
 }
 
@@ -274,7 +275,7 @@ void *mono_mmap_open_file (MonoString *path, int mode, MonoString *mapName, gint
 	gboolean delete_on_error = FALSE;
 
 	if (path) {
-		w_path = mono_string_to_utf16 (path);
+		w_path = mono_string_chars (path);
 		WIN32_FILE_ATTRIBUTE_DATA file_attrs;
 		gboolean existed = GetFileAttributesExW (w_path, GetFileExInfoStandard, &file_attrs);
 		if (!existed && mode == FILE_MODE_CREATE_NEW && *capacity == 0) {
@@ -295,6 +296,9 @@ void *mono_mmap_open_file (MonoString *path, int mode, MonoString *mapName, gint
 			goto done;
 		}
 		delete_on_error = !existed;
+	} else {
+		// INVALID_HANDLE_VALUE (-1) is valid, to make named shared memory,
+		// backed by physical memory / pagefile.
 	}
 
 	result = open_handle (hFile, mapName, mode, capacity, access, options, error);
@@ -304,8 +308,6 @@ done:
 		CloseHandle (hFile);
 	if (!result && delete_on_error)
 		DeleteFileW (w_path);
-	if (w_path)
-		g_free (w_path);
 
 	return result;
 }
@@ -320,7 +322,7 @@ void *mono_mmap_open_handle (void *handle, MonoString *mapName, gint64 *capacity
 void mono_mmap_close (void *mmap_handle)
 {
 	g_assert (mmap_handle);
-	CloseHandle ((HANDLE) mmap_handle);
+	CloseHandle (mmap_handle);
 }
 
 void mono_mmap_configure_inheritability (void *mmap_handle, gboolean inheritability)

@@ -19,6 +19,7 @@
 #include <mono/utils/mono-proclib.h>
 #include <mono/utils/mono-mmap.h>
 #include <mono/utils/mono-hwcap.h>
+#include <mono/utils/unlocked.h>
 
 #include "mini-ppc.h"
 #ifdef TARGET_POWERPC64
@@ -28,11 +29,16 @@
 #endif
 #include "trace.h"
 #include "ir-emit.h"
+#include "aot-runtime.h"
+#include "mini-runtime.h"
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #endif
 #ifdef __linux__
 #include <unistd.h>
+#endif
+#ifdef _AIX
+#include <sys/systemcfg.h>
 #endif
 
 #define FORCE_INDIR_CALL 1
@@ -66,8 +72,6 @@ enum {
 #define mono_mini_arch_lock() mono_os_mutex_lock (&mini_arch_mutex)
 #define mono_mini_arch_unlock() mono_os_mutex_unlock (&mini_arch_mutex)
 static mono_mutex_t mini_arch_mutex;
-
-int mono_exc_esp_offset = 0;
 
 /*
  * The code generated for sequence points reads from this location, which is
@@ -536,6 +540,10 @@ mono_arch_init (void)
 #elif defined(G_COMPILER_CODEWARRIOR)
 	cachelinesize = 32;
 	cachelineinc = 32;
+#elif defined(_AIX)
+	/* FIXME: use block instead? */
+	cachelinesize = _system_configuration.icache_line;
+	cachelineinc = _system_configuration.icache_line;
 #else
 //#error Need a way to get cache line size
 #endif
@@ -1004,8 +1012,7 @@ get_call_info (MonoMethodSignature *sig)
 	fr = PPC_FIRST_FPARG_REG;
 	gr = PPC_FIRST_ARG_REG;
 
-	/* FIXME: handle returning a struct */
-	if (MONO_TYPE_ISSTRUCT (sig->ret)) {
+	if (mini_type_is_vtype (sig->ret)) {
 		cinfo->vtype_retaddr = TRUE;
 	}
 
@@ -1455,20 +1462,6 @@ mono_arch_allocate_vars (MonoCompile *m)
 		offset += 8;
 
 	/* the MonoLMF structure is stored just below the stack pointer */
-
-#if 0
-	/* this stuff should not be needed on ppc and the new jit,
-	 * because a call on ppc to the handlers doesn't change the 
-	 * stack pointer and the jist doesn't manipulate the stack pointer
-	 * for operations involving valuetypes.
-	 */
-	/* reserve space to store the esp */
-	offset += sizeof (gpointer);
-
-	/* this is a global constant */
-	mono_exc_esp_offset = offset;
-#endif
-
 	if (MONO_TYPE_ISSTRUCT (sig->ret)) {
 		offset += sizeof(gpointer) - 1;
 		offset &= ~(sizeof(gpointer) - 1);
@@ -1904,7 +1897,7 @@ enum {
 };
 
 void*
-mono_arch_instrument_epilog_full (MonoCompile *cfg, void *func, void *p, gboolean enable_arguments, gboolean preserve_argument_registers)
+mono_arch_instrument_epilog (MonoCompile *cfg, void *func, void *p, gboolean enable_arguments)
 {
 	guchar *code = p;
 	int save_mode = SAVE_NONE;
@@ -3183,17 +3176,6 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 
 	cpos = bb->max_offset;
 
-	if (cfg->prof_options & MONO_PROFILE_COVERAGE) {
-		//MonoCoverageInfo *cov = mono_get_coverage_info (cfg->method);
-		//g_assert (!mono_compile_aot);
-		//cpos += 6;
-		//if (bb->cil_code)
-		//	cov->data [bb->dfn].iloffset = bb->cil_code - cfg->cil_code;
-		/* this is not thread save, but good enough */
-		/* fixme: howto handle overflows? */
-		//x86_inc_mem (code, &cov->data [bb->dfn].count); 
-	}
-
 	MONO_BB_FOR_EACH_INS (bb, ins) {
 		offset = code - cfg->native_code;
 
@@ -4118,7 +4100,8 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 		case OP_CALL_HANDLER: 
 			mono_add_patch_info (cfg, code - cfg->native_code, MONO_PATCH_INFO_BB, ins->inst_target_bb);
 			ppc_bl (code, 0);
-			mono_cfg_add_try_hole (cfg, ins->inst_eh_block, code, bb);
+			for (GList *tmp = ins->inst_eh_blocks; tmp != bb->clause_holes; tmp = tmp->prev)
+				mono_cfg_add_try_hole (cfg, (MonoExceptionClause *)tmp->data, code, bb);
 			break;
 		case OP_LABEL:
 			ins->inst_c0 = code - cfg->native_code;
@@ -4135,6 +4118,11 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 		case OP_BR_REG:
 			ppc_mtctr (code, ins->sreg1);
 			ppc_bcctr (code, PPC_BR_ALWAYS, 0);
+			break;
+		case OP_ICNEQ:
+			ppc_li (code, ins->dreg, 0);
+			ppc_bc (code, PPC_BR_TRUE, PPC_BR_EQ, 2);
+			ppc_li (code, ins->dreg, 1);
 			break;
 		case OP_CEQ:
 		case OP_ICEQ:
@@ -4153,6 +4141,12 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 			ppc_bc (code, PPC_BR_TRUE, PPC_BR_LT, 2);
 			ppc_li (code, ins->dreg, 0);
 			break;
+		case OP_ICGE:
+		case OP_ICGE_UN:
+			ppc_li (code, ins->dreg, 1);
+			ppc_bc (code, PPC_BR_FALSE, PPC_BR_LT, 2);
+			ppc_li (code, ins->dreg, 0);
+			break;
 		case OP_CGT:
 		case OP_CGT_UN:
 		case OP_ICGT:
@@ -4161,6 +4155,12 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 		CASE_PPC64 (OP_LCGT_UN)
 			ppc_li (code, ins->dreg, 1);
 			ppc_bc (code, PPC_BR_TRUE, PPC_BR_GT, 2);
+			ppc_li (code, ins->dreg, 0);
+			break;
+		case OP_ICLE:
+		case OP_ICLE_UN:
+			ppc_li (code, ins->dreg, 1);
+			ppc_bc (code, PPC_BR_FALSE, PPC_BR_GT, 2);
 			ppc_li (code, ins->dreg, 0);
 			break;
 		case OP_COND_EXC_EQ:
@@ -4365,15 +4365,17 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 			ppc_fcmpu (code, 0, ins->sreg1, ins->sreg2);
 			break;
 		case OP_FCEQ:
+		case OP_FCNEQ:
 			ppc_fcmpo (code, 0, ins->sreg1, ins->sreg2);
-			ppc_li (code, ins->dreg, 0);
-			ppc_bc (code, PPC_BR_FALSE, PPC_BR_EQ, 2);
 			ppc_li (code, ins->dreg, 1);
+			ppc_bc (code, ins->opcode == OP_FCEQ ? PPC_BR_TRUE : PPC_BR_FALSE, PPC_BR_EQ, 2);
+			ppc_li (code, ins->dreg, 0);
 			break;
 		case OP_FCLT:
+		case OP_FCGE:
 			ppc_fcmpo (code, 0, ins->sreg1, ins->sreg2);
 			ppc_li (code, ins->dreg, 1);
-			ppc_bc (code, PPC_BR_TRUE, PPC_BR_LT, 2);
+			ppc_bc (code, ins->opcode == OP_FCLT ? PPC_BR_TRUE : PPC_BR_FALSE, PPC_BR_LT, 2);
 			ppc_li (code, ins->dreg, 0);
 			break;
 		case OP_FCLT_UN:
@@ -4384,9 +4386,10 @@ mono_arch_output_basic_block (MonoCompile *cfg, MonoBasicBlock *bb)
 			ppc_li (code, ins->dreg, 0);
 			break;
 		case OP_FCGT:
+		case OP_FCLE:
 			ppc_fcmpo (code, 0, ins->sreg1, ins->sreg2);
 			ppc_li (code, ins->dreg, 1);
-			ppc_bc (code, PPC_BR_TRUE, PPC_BR_GT, 2);
+			ppc_bc (code, ins->opcode == OP_FCGT ? PPC_BR_TRUE : PPC_BR_FALSE, PPC_BR_GT, 2);
 			ppc_li (code, ins->dreg, 0);
 			break;
 		case OP_FCGT_UN:
@@ -4918,9 +4921,6 @@ mono_arch_emit_prolog (MonoCompile *cfg)
 		MonoInst *ins;
 		bb->max_offset = max_offset;
 
-		if (cfg->prof_options & MONO_PROFILE_COVERAGE)
-			max_offset += 6; 
-
 		MONO_BB_FOR_EACH_INS (bb, ins)
 			max_offset += ins_native_length (cfg, ins);
 	}
@@ -5327,9 +5327,6 @@ mono_arch_emit_epilog (MonoCompile *cfg)
 		max_epilog_size += 128;
 	
 	if (mono_jit_trace_calls != NULL)
-		max_epilog_size += 50;
-
-	if (cfg->prof_options & MONO_PROFILE_ENTER_LEAVE)
 		max_epilog_size += 50;
 
 	while (cfg->code_len + max_epilog_size > (cfg->code_size - 16)) {
@@ -5757,7 +5754,7 @@ mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoDomain *domain, MonoIMTC
 	}
 
 	if (!fail_tramp)
-		mono_stats.imt_trampolines_size += code - start;
+		UnlockedAdd (&mono_stats.imt_trampolines_size, code - start);
 	g_assert (code - start <= size);
 	mono_arch_flush_icache (start, size);
 
@@ -5797,12 +5794,6 @@ mono_arch_emit_inst_for_method (MonoCompile *cfg, MonoMethod *cmethod, MonoMetho
 {
 	/* FIXME: */
 	return NULL;
-}
-
-gboolean
-mono_arch_print_tree (MonoInst *tree, int arity)
-{
-	return 0;
 }
 
 mgreg_t
@@ -6007,15 +5998,6 @@ mono_arch_get_seq_point_info (MonoDomain *domain, guint8 *code)
 	return NULL;
 }
 
-void
-mono_arch_init_lmf_ext (MonoLMFExt *ext, gpointer prev_lmf)
-{
-	ext->lmf.previous_lmf = prev_lmf;
-	/* Mark that this is a MonoLMFExt */
-	ext->lmf.previous_lmf = (gpointer)(((gssize)ext->lmf.previous_lmf) | 2);
-	ext->lmf.ebp = (gssize)ext;
-}
-
 #endif
 
 gboolean
@@ -6034,15 +6016,3 @@ mono_arch_opcode_supported (int opcode)
 	}
 }
 
-
-#if 0
-// FIXME: To get the test case  finally_block_ending_in_dead_bb  to work properly we need to define the following
-// (in mini-ppc.h) and then implement the fuction mono_arch_create_handler_block_trampoline.
-//  #define MONO_ARCH_HAVE_HANDLER_BLOCK_GUARD 1
-
-gpointer
-mono_arch_create_handler_block_trampoline (void)
-{
-	. . .
-}
-#endif

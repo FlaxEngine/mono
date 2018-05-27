@@ -20,6 +20,10 @@
 #include <mono/utils/atomic.h>
 #include <mono/utils/mono-lazy-init.h>
 #include <mono/utils/mono-threads.h>
+#ifdef HAVE_BACKTRACE_SYMBOLS
+#include <execinfo.h>
+#endif
+
 /* TODO (missing pieces)
 
 Add counters for:
@@ -31,14 +35,13 @@ Add counters for:
 Actually do something in mono_handle_verify
 
 Shrink the handles stack in mono_handle_stack_scan
-Properly report it to the profiler.
 Add a boehm implementation
 
 TODO (things to explore):
 
 There's no convenient way to wrap the object allocation function.
 Right now we do this:
-	MonoCultureInfoHandle culture = MONO_HANDLE_NEW (MonoCultureInfo, mono_object_new_checked (domain, klass, &error));
+	MonoCultureInfoHandle culture = MONO_HANDLE_NEW (MonoCultureInfo, mono_object_new_checked (domain, klass, error));
 
 Maybe what we need is a round of cleanup around all exposed types in the runtime to unify all helpers under the same hoof.
 Combine: MonoDefaults, GENERATE_GET_CLASS_WITH_CACHE, TYPED_HANDLE_DECL and friends.
@@ -65,9 +68,33 @@ Combine: MonoDefaults, GENERATE_GET_CLASS_WITH_CACHE, TYPED_HANDLE_DECL and frie
  * Note that the handle stack is scanned PRECISELY (see
  * sgen_client_scan_thread_data ()).  That means there should not be
  * stale objects scanned.  So when we manipulate the size of a chunk,
- * wemust ensure that the newly scannable slot is either null or
+ * we must ensure that the newly scannable slot is either null or
  * points to a valid value.
  */
+
+static HandleStack*
+new_handle_stack (void)
+{
+	return g_new (HandleStack, 1);
+}
+
+static void
+free_handle_stack (HandleStack *stack)
+{
+	g_free (stack);
+}
+
+static HandleChunk*
+new_handle_chunk (void)
+{
+	return g_new (HandleChunk, 1);
+}
+
+static void
+free_handle_chunk (HandleChunk *chunk)
+{
+	g_free (chunk);
+}
 
 const MonoObjectHandle mono_null_value_handle = NULL;
 
@@ -111,7 +138,14 @@ chunk_element_to_chunk_idx (HandleStack *stack, HandleChunkElem *elem, int *out_
 }
 
 #ifdef MONO_HANDLE_TRACK_OWNER
-#define SET_OWNER(chunk,idx) do { (chunk)->elems[(idx)].owner = owner; } while (0)
+#ifdef HAVE_BACKTRACE_SYMBOLS
+#define SET_BACKTRACE(btaddrs) do {					\
+	backtrace(btaddrs, 7);						\
+	} while (0)
+#else
+#define SET_BACKTRACE(btaddrs) 0
+#endif
+#define SET_OWNER(chunk,idx) do { (chunk)->elems[(idx)].owner = owner; SET_BACKTRACE (&((chunk)->elems[(idx)].backtrace_ips[0])); } while (0)
 #else
 #define SET_OWNER(chunk,idx) do { } while (0)
 #endif
@@ -181,12 +215,12 @@ retry:
 		 * between 1 and 2, the object is still live)
 		 */
 		*objslot = NULL;
+		SET_OWNER (top,idx);
+		SET_SP (handles, top, idx);
 		mono_memory_write_barrier ();
 		top->size++;
 		mono_memory_write_barrier ();
 		*objslot = obj;
-		SET_OWNER (top,idx);
-		SET_SP (handles, top, idx);
 		return objslot;
 	}
 	if (G_LIKELY (top->next)) {
@@ -197,7 +231,7 @@ retry:
 		handles->top = top;
 		goto retry;
 	}
-	HandleChunk *new_chunk = g_new (HandleChunk, 1);
+	HandleChunk *new_chunk = new_handle_chunk ();
 	new_chunk->size = 0;
 	new_chunk->prev = top;
 	new_chunk->next = NULL;
@@ -245,10 +279,14 @@ mono_handle_new_interior (gpointer rawptr, const char *owner)
 HandleStack*
 mono_handle_stack_alloc (void)
 {
-	HandleStack *stack = g_new0 (HandleStack, 1);
-	HandleChunk *chunk = g_new0 (HandleChunk, 1);
-	HandleChunk *interior = g_new0 (HandleChunk, 1);
+	HandleStack *stack = new_handle_stack ();
+	HandleChunk *chunk = new_handle_chunk ();
+	HandleChunk *interior = new_handle_chunk ();
 
+	chunk->prev = chunk->next = NULL;
+	chunk->size = 0;
+	interior->prev = interior->next = NULL;
+	interior->size = 0;
 	mono_memory_write_barrier ();
 	stack->top = stack->bottom = chunk;
 	stack->interior = interior;
@@ -268,12 +306,12 @@ mono_handle_stack_free (HandleStack *stack)
 	mono_memory_write_barrier ();
 	while (c) {
 		HandleChunk *next = c->next;
-		g_free (c);
+		free_handle_chunk (c);
 		c = next;
 	}
-	g_free (c);
-	g_free (stack->interior);
-	g_free (stack);
+	free_handle_chunk (c);
+	free_handle_chunk (stack->interior);
+	free_handle_stack (stack);
 }
 
 void
@@ -324,18 +362,13 @@ check_handle_stack_monotonic (HandleStack *stack)
 	while (cur) {
 		for (int i = 0;i < cur->size; ++i) {
 			HandleChunkElem *elem = chunk_element (cur, i);
-			if (prev && elem->alloc_sp < prev->alloc_sp) {
+			if (prev && elem->alloc_sp > prev->alloc_sp) {
 				monotonic = FALSE;
-				g_warning ("Handle %p (object %p) (allocated from \"%s\") is was allocated deeper in the call stack than its successor (allocated from \"%s\").", prev, prev->o,
 #ifdef MONO_HANDLE_TRACK_OWNER
-					   prev->owner,
-					   elem->owner
+				g_warning ("Handle %p (object %p) (allocated from \"%s\") was allocated deeper in the call stack than its successor Handle %p (object %p) (allocated from \"%s\").", prev, prev->o, prev->owner, elem, elem->o, elem->owner);
 #else
-					   "unknown owner",
-					   "unknown owner"
+				g_warning ("Handle %p (object %p) was allocated deeper in the call stack than its successor Handle %p (object %p).", prev, prev->o, elem, elem->o);
 #endif
-					);
-				
 			}
 			prev = elem;
 		}
@@ -348,10 +381,11 @@ check_handle_stack_monotonic (HandleStack *stack)
 }
 
 void
-mono_handle_stack_scan (HandleStack *stack, GcScanFunc func, gpointer gc_data, gboolean precise)
+mono_handle_stack_scan (HandleStack *stack, GcScanFunc func, gpointer gc_data, gboolean precise, gboolean check)
 {
-	if (precise) /* run just once (per handle stack) per GC */
+	if (check) /* run just once (per handle stack) per GC */
 		check_handle_stack_monotonic (stack);
+
 	/*
 	  We're called twice - on the imprecise pass we call func to pin the
 	  objects where the handle points to its interior.  On the precise
@@ -497,6 +531,16 @@ mono_string_handle_pin_chars (MonoStringHandle handle, uint32_t *gchandle)
 	*gchandle = mono_gchandle_from_handle (MONO_HANDLE_CAST (MonoObject, handle), TRUE);
 	MonoString *raw = MONO_HANDLE_RAW (handle);
 	return mono_string_chars (raw);
+}
+
+gpointer
+mono_object_handle_pin_unbox (MonoObjectHandle obj, uint32_t *gchandle)
+{
+	g_assert (!MONO_HANDLE_IS_NULL (obj));
+	MonoClass *klass = mono_handle_class (obj);
+	g_assert (klass->valuetype);
+	*gchandle = mono_gchandle_from_handle (obj, TRUE);
+	return mono_object_unbox (MONO_HANDLE_RAW (obj));
 }
 
 void
