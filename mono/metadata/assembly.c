@@ -3900,8 +3900,6 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 
 	mono_assembly_invoke_unload_hook (assembly);
 
-	mono_assembly_invoke_unload_hook (assembly);
-
 	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading assembly %s [%p].", assembly->aname.name, assembly);
 
 	mono_debug_close_image (assembly->image);

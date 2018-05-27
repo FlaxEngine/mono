@@ -1343,45 +1343,6 @@ remove_assemblies_from_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable
 		}
 	}*/
 
-/*
-* LOCKING: assumes assemblies_lock in the domain is already locked.
-*/
-static void
-remove_assemblies_from_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *ht)
-{
-	gint i;
-	GSList *tmp;
-	gboolean destroy_ht = FALSE;
-
-	if (!ass->aname.name)
-		return;
-
-	if (!ht) {
-		ht = g_hash_table_new(mono_aligned_addr_hash, NULL);
-		destroy_ht = TRUE;
-		for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
-			g_hash_table_insert(ht, tmp->data, tmp->data);
-		}
-	}
-
-	if (g_hash_table_lookup(ht, ass)) {
-		//mono_assembly_close(ass); // FIXME: call this for reference assemblies?
-		g_hash_table_remove(ht, ass);
-		domain->domain_assemblies = g_slist_remove(domain->domain_assemblies, ass);
-		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Assembly %s[%p] removed from domain %s, ref_count=%d", ass->aname.name, ass, domain->friendly_name, ass->ref_count);
-	}
-
-	// TODO: handle references?
-	/*if (ass->image->references) {
-		for (i = 0; i < ass->image->nreferences; i++) {
-			if (ass->image->references[i] && ass->image->references[i] != REFERENCE_MISSING) {
-				if (g_hash_table_lookup(ht, ass->image->references[i])) {
-					remove_assemblies_from_domain(domain, ass->image->references[i], ht);
-				}
-			}
-		}
-	}*/
-
 	if (destroy_ht)
 		g_hash_table_destroy(ht);
 }
