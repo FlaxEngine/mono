@@ -6623,6 +6623,12 @@ mono_object_unbox (MonoObject *obj)
 	return ((char*)obj) + sizeof (MonoObject);
 }
 
+gboolean
+mono_object_is_from_assembly(MonoObject *obj, MonoAssembly *assembly)
+{
+	return mono_class_is_from_assembly(mono_object_get_class(obj), assembly);
+}
+
 /**
  * mono_object_isinst:
  * \param obj an object

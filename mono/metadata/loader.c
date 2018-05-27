@@ -2611,6 +2611,31 @@ mono_method_get_class (MonoMethod *method)
 	return method->klass;
 }
 
+gboolean
+mono_method_is_from_assembly(MonoMethod *method, MonoAssembly *assembly)
+{
+	guint argc;
+	MonoMethodSignature *sig;
+
+	if (!method->klass)
+		return FALSE;
+
+	if (mono_class_is_from_assembly(method->klass, assembly))
+		return TRUE;
+
+	sig = mono_method_signature(method);
+	if (mono_type_is_from_assembly(sig->ret, assembly))
+		return TRUE;
+	argc = sig->param_count;
+	while (argc-- > 0)
+	{
+		if (mono_type_is_from_assembly(sig->params[argc], assembly))
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
 /**
  * mono_method_get_token:
  */

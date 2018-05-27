@@ -6634,6 +6634,41 @@ mono_type_get_type (MonoType *type)
 	return type->type;
 }
 
+// Checks if type or any of the subtypes (generic arguments, etc.) comes from the given assembly
+gboolean
+mono_type_is_from_assembly(MonoType *type, MonoAssembly *assembly)
+{
+	gint argc;
+	MonoType* genericType;
+	MonoClass *klass = mono_class_from_mono_type(type);
+
+	// Prevent issues
+	if (!klass)
+		return FALSE;
+
+	// Check class source assembly
+	if (mono_class_get_image(klass)->assembly == assembly)
+		return TRUE;
+
+	// Check generic class argument types (recursive)
+	if (type->type == MONO_TYPE_GENERICINST)
+	{
+		argc = type->data.generic_class->context.class_inst->type_argc;
+		while (argc-- > 0)
+		{
+			genericType = type->data.generic_class->context.class_inst->type_argv[argc];
+			if (mono_type_is_from_assembly(genericType, assembly))
+				return TRUE;
+		}
+	}
+
+	// Base class
+	if (klass->parent && mono_class_is_from_assembly(klass->parent, assembly))
+		return TRUE;
+
+	return FALSE;
+}
+
 /**
  * mono_type_get_signature:
  * \param type the \c MonoType operated on
