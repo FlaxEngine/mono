@@ -13,6 +13,20 @@
 #include <windows.h>
 #include "mono/metadata/w32file-win32-internals.h"
 
+gpointer
+mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)
+{
+	gpointer res;
+	MONO_ENTER_GC_SAFE;
+	CREATEFILE2_EXTENDED_PARAMETERS param = { 0 };
+	param.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+	param.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+	param.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+	res = CreateFile2(name, (DWORD)fileaccess, (DWORD)sharemode, (DWORD)createmode, &param);
+	MONO_EXIT_GC_SAFE;
+	return res;
+}
+
 gboolean
 mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 {

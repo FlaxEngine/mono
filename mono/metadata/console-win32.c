@@ -74,3 +74,6 @@ ves_icall_System_ConsoleDriver_TtySetup (MonoString *keypad, MonoString *teardow
 	return FALSE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+// HACK: VS17 not building the included files for UWP
+#include "console-win32-uwp.c"

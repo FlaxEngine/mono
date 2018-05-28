@@ -173,7 +173,7 @@ mono_win32_signal_object_and_wait (HANDLE toSignal, HANDLE toWait, DWORD timeout
 	return result;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 DWORD
 mono_win32_msg_wait_for_multiple_objects_ex (DWORD count, CONST HANDLE *handles, DWORD timeout, DWORD wakeMask, DWORD flags)
 {
@@ -217,3 +217,6 @@ mono_win32_wsa_wait_for_multiple_events (DWORD count, const WSAEVENT FAR *handle
 
 	return result;
 }
+
+// HACK: VS17 not building the included files for UWP
+#include "mono-os-wait-win32-uwp.c"

@@ -124,3 +124,6 @@ mono_string_to_utf8str (MonoString *s)
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "marshal-windows-uwp.c"

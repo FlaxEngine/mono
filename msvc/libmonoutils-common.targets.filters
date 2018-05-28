@@ -37,6 +37,9 @@
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-windows.c">
       <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClCompile>
+    <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-windows-uwp.c">
+      <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
+    </ClCompile>
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-darwin.c">
       <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClCompile>
@@ -94,6 +97,9 @@
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-mmap-windows.c">
       <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClCompile>
+    <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-mmap-windows-uwp.c">
+      <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
+    </ClCompile>
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-mmap.h">
       <Filter>Header Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClInclude>
@@ -131,6 +137,9 @@
       <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClCompile>
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-proclib-windows.c">
+      <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-proclib-windows-uwp.c">
       <Filter>Source Files$(MonoUtilsFilterSubFolder)\common</Filter>
     </ClCompile>
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-proclib.h">

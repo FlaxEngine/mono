@@ -214,3 +214,6 @@ mono_icall_write_windows_debug_string (MonoString *message)
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "icall-windows-uwp.c"

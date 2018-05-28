@@ -500,3 +500,6 @@ ves_icall_Mono_Security_Cryptography_KeyPairPersistence_ProtectUser (MonoString 
 	return (MonoBoolean)ret;
 }
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "mono-security-windows-uwp.c"

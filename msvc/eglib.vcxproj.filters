@@ -12,15 +12,4 @@
       <UniqueIdentifier>{38a39ff1-842b-431b-b54b-24094e8283eb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\eglib\src\gmisc-win32-uwp.c">
-      <Filter>Source Files\Win32</Filter>
-    </ClCompile>
-    <ClCompile Include="..\eglib\src\gmodule-win32-uwp.c">
-      <Filter>Source Files\Win32</Filter>
-    </ClCompile>
-    <ClCompile Include="..\eglib\src\gunicode-win32-uwp.c">
-      <Filter>Source Files\Win32</Filter>
-    </ClCompile>
-  </ItemGroup>
 </Project>

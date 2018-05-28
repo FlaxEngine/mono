@@ -54,13 +54,31 @@ mono_w32process_module_get_information (gpointer process, gpointer module, MODUL
 static gboolean
 mono_w32process_get_fileversion_info (gunichar2 *filename, gpointer *data)
 {
-	return GetFileVersionInfoSizeExW(0, filename, handle);
-}
+	guint32 handle;
+	gsize datasize;
 
-static gboolean
-mono_w32process_get_fileversion_info (gunichar2 *filename, guint32 handle, guint32 len, gpointer data)
-{
-	return GetFileVersionInfoExW(0, filename, handle, len, data);
+	g_assert(data);
+	*data = NULL;
+
+#if _XBOX_ONE
+	datasize = GetFileVersionInfoSizeExW(0, filename, &handle);
+#else
+	datasize = GetFileVersionInfoSize(filename, &handle);
+#endif
+	if (datasize <= 0)
+		return FALSE;
+
+	*data = g_malloc0(datasize);
+#if _XBOX_ONE
+	if (!GetFileVersionInfoExW(0, filename, handle, datasize, *data)) {
+#else
+	if (!GetFileVersionInfo(filename, handle, datasize, *data)) {
+#endif
+		g_free(*data);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 static gboolean

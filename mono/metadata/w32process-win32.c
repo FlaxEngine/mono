@@ -480,3 +480,6 @@ ves_icall_Microsoft_Win32_NativeMethods_GetCurrentProcess (void)
 {
 	return GetCurrentProcess ();
 }
+
+// HACK: VS17 not building the included files for UWP
+#include "w32process-win32-uwp.c"
