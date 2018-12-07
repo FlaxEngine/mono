@@ -227,7 +227,7 @@ void STDMETHODCALLTYPE CorExitProcess(int exitCode)
 		mono_runtime_quit ();
 	}
 #endif
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	TerminateProcess (GetCurrentProcess(), exitCode);
 #else
 	ExitProcess (exitCode);
@@ -513,7 +513,7 @@ typedef struct _EXPORT_FIXUP
 	} ProcAddress;
 } EXPORT_FIXUP;
 
-#if !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 
 /* Has to be binary ordered. */
 static const EXPORT_FIXUP ExportFixups[] = {
@@ -933,7 +933,7 @@ mono_load_coree (const char* exe_file_name)
 	if (!init_from_coree && exe_file_name)
 		mono_coree_set_act_ctx (exe_file_name);
 
-#if !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	/* ntdll.dll loads mscoree.dll from the system32 directory. */
 	required_size = GetSystemDirectory (NULL, 0);
 	file_name = g_new (gunichar2, required_size + 12);
@@ -958,7 +958,7 @@ mono_load_coree (const char* exe_file_name)
 void
 mono_fixup_exe_image (MonoImage* image)
 {
-#if !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	if (!init_from_coree && image && image->is_module_handle)
 		MonoFixupExe ((HMODULE) image->raw_data);
 #endif

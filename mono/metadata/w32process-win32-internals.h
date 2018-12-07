@@ -9,14 +9,14 @@
 #include <config.h>
 #include <glib.h>
 
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #endif
 
 // On platforms not using classic WIN API support the  implementation of bellow methods are hosted in separate source file
 // process-windows-*.c. On platforms using classic WIN API the implementation is still keept in process.c and still declared
 // static and in some places even inlined.
-#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 
 #include <winnt.h>
 

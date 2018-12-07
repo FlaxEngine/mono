@@ -208,7 +208,7 @@ mono_w32socket_close (SOCKET sock)
 {
 	gboolean ret;
 	MONO_ENTER_GC_SAFE;
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	ret = CloseHandle((HANDLE)sock);
 #else
 	ret = closesocket(sock);

@@ -11,6 +11,13 @@
 #include <windows.h>
 #include <gmodule-win32-internals.h>
 
+GModule *
+g_module_open (const gchar *file, GModuleFlags flags)
+{
+	g_unsupported_api ("g_module_open");
+	return NULL;
+}
+
 gpointer
 w32_find_symbol (const gchar *symbol_name)
 {

@@ -505,7 +505,7 @@ void GC_init()
 
 #if defined(GC_WIN32_THREADS) && !defined(GC_PTHREADS)
     if (!GC_is_initialized) {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 		InitializeCriticalSectionEx(&GC_allocate_ml, 4000, CRITICAL_SECTION_NO_DEBUG_INFO);
 #else
       BOOL (WINAPI *pfn) (LPCRITICAL_SECTION, DWORD) = NULL;
@@ -902,7 +902,7 @@ out:
   GC_CONST char * buf;
   size_t len;
   {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	  return 0;
 #else
       BOOL tmp;

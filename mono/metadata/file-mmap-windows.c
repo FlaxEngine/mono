@@ -17,9 +17,9 @@
 #include <glib.h>
 #include <mono/utils/mono-compiler.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && defined(HOST_WIN32)
+#if defined(HOST_WIN32)
 
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 #include <windows.h>
 #include <MemoryApi.h>
 #pragma comment(lib, "Kernel32.lib")
@@ -182,7 +182,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 	w_mapName = mapName ? mono_string_chars (mapName) : NULL;
 
 	if (mode == FILE_MODE_CREATE_NEW || handle != INVALID_HANDLE_VALUE) {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 		result = CreateFileMappingFromApp((HANDLE)handle, NULL, get_page_access (access) | options, (ULONG64)*capacity, w_mapName);
 #else
 		result = CreateFileMappingW((HANDLE)handle, NULL, get_page_access(access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
@@ -195,7 +195,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 			*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 		}
 	} else if (mode == FILE_MODE_OPEN || mode == FILE_MODE_OPEN_OR_CREATE && access == MMAP_FILE_ACCESS_WRITE) {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 		result = OpenFileMappingW(get_file_map_access(access), FALSE, w_mapName);
 #else
 		result = OpenFileMappingW (get_file_map_access (access), FALSE, w_mapName);
@@ -225,7 +225,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 		guint32 waitSleep = 0;
 
 		while (waitRetries > 0) {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 			result = CreateFileMappingFromApp((HANDLE)handle, NULL, get_page_access (access) | options, (ULONG64)*capacity, w_mapName);
 #else
 			result = CreateFileMappingW((HANDLE)handle, NULL, get_page_access(access) | options, (DWORD)(((guint64)*capacity) >> 32), (DWORD)*capacity, w_mapName);
@@ -236,7 +236,7 @@ static void *open_handle (void *handle, MonoString *mapName, int mode, gint64 *c
 				*error = convert_win32_error (GetLastError (), COULD_NOT_OPEN);
 				break;
 			}
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 			result = OpenFileMappingW(get_file_map_access (access), FALSE, w_mapName);
 #else
 			result = OpenFileMappingW(get_file_map_access(access), FALSE, w_mapName);
@@ -282,7 +282,7 @@ void *mono_mmap_open_file (MonoString *path, int mode, MonoString *mapName, gint
 			*error = CAPACITY_SMALLER_THAN_FILE_SIZE;
 			goto done;
 		}
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 		CREATEFILE2_EXTENDED_PARAMETERS param = { 0 };
 		param.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
 		param.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
@@ -328,7 +328,7 @@ void mono_mmap_close (void *mmap_handle)
 void mono_mmap_configure_inheritability (void *mmap_handle, gboolean inheritability)
 {
 	g_assert (mmap_handle);
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	g_unsupported_api("SetHandleInformation");
 #else
 	if (!SetHandleInformation ((HANDLE) mmap_handle, HANDLE_FLAG_INHERIT, inheritability ? HANDLE_FLAG_INHERIT : 0)) {
@@ -396,7 +396,7 @@ int mono_mmap_map (void *handle, gint64 offset, gint64 *size, int access, void *
 		return CAPACITY_LARGER_THAN_LOGICAL_ADDRESS_SPACE;
 #endif
 	
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	void *address = MapViewOfFileFromApp((HANDLE) handle, get_file_map_access (access), (ULONG64)newOffset, (SIZE_T) nativeSize);
 #else
 	void *address = MapViewOfFile ((HANDLE) handle, get_file_map_access (access), (DWORD) (newOffset >> 32), (DWORD) newOffset, (SIZE_T) nativeSize);
@@ -420,7 +420,7 @@ int mono_mmap_map (void *handle, gint64 offset, gint64 *size, int access, void *
 	// and size of the region of pages with matching attributes starting from base address.
 	// VirtualQueryEx: http://msdn.microsoft.com/en-us/library/windows/desktop/aa366907(v=vs.85).aspx
 	if (((viewInfo.State & MEM_RESERVE) != 0) || viewSize < (guint64) nativeSize) {
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 		void *tempAddress = VirtualAllocFromApp(address, nativeSize != 0 ? nativeSize : viewSize, MEM_COMMIT, get_page_access (access));
 #else
 		void *tempAddress = VirtualAlloc(address, nativeSize != 0 ? nativeSize : viewSize, MEM_COMMIT, get_page_access(access));

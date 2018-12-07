@@ -51,7 +51,7 @@ void ves_icall_System_IO_MonoIO_DumpHandles (void)
 	return;
 }
 
-#if !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 
 gpointer
 mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)

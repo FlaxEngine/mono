@@ -1320,7 +1320,7 @@ void GC_register_data_segments()
   
   void GC_init_win32()
   {
-#if !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
     /* if we're running under win32s, assume that no DLLs will be loaded */
     DWORD v = GetVersion();
     GC_no_win32_dlls |= ((v & 0x80000000) && (v & 0xff) <= 3);

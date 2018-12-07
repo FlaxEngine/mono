@@ -17,6 +17,10 @@
 #include <shlobj.h>
 #endif
 
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
+#pragma comment(lib, "Kernel32.lib")
+#endif
+
 void
 mono_icall_make_platform_path (gchar *path)
 {

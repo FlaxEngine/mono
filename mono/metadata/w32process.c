@@ -1,7 +1,7 @@
 /**
  * \file
  */
-
+#include <config.h>
 #include <glib.h>
 
 #include "w32process.h"
@@ -60,7 +60,7 @@ mono_w32process_get_fileversion_info (gunichar2 *filename, gpointer *data)
 	g_assert(data);
 	*data = NULL;
 
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	datasize = GetFileVersionInfoSizeExW(0, filename, &handle);
 #else
 	datasize = GetFileVersionInfoSize(filename, &handle);
@@ -69,7 +69,7 @@ mono_w32process_get_fileversion_info (gunichar2 *filename, gpointer *data)
 		return FALSE;
 
 	*data = g_malloc0(datasize);
-#if _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	if (!GetFileVersionInfoExW(0, filename, handle, datasize, *data)) {
 #else
 	if (!GetFileVersionInfo(filename, handle, datasize, *data)) {

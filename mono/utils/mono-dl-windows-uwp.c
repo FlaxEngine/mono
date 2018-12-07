@@ -14,6 +14,15 @@
 #include "mono/utils/mono-dl-windows-internals.h"
 
 void*
+mono_dl_open_file (const char *file, int flags)
+{
+	g_unsupported_api ("mono_dl_open_file");
+    SetLastError (ERROR_NOT_SUPPORTED);
+
+	return NULL;
+}
+
+void*
 mono_dl_lookup_symbol_in_process (const char *symbol_name)
 {
 	g_unsupported_api ("EnumProcessModules");

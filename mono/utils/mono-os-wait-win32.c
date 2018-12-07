@@ -217,6 +217,3 @@ mono_win32_wsa_wait_for_multiple_events (DWORD count, const WSAEVENT FAR *handle
 
 	return result;
 }
-
-// HACK: VS17 not building the included files for UWP
-#include "mono-os-wait-win32-uwp.c"
