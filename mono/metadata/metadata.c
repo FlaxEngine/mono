@@ -6635,14 +6635,14 @@ mono_type_get_type (MonoType *type)
 }
 
 gboolean
-type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* root)
+type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* typeToSkip)
 {
 	gint argc;
-	MonoType* genericType;
+	MonoType *genericType;
 	MonoClass *klass = mono_class_from_mono_type(type);
 
 	// Prevent issues
-	if (!klass || klass == root)
+	if (!klass || klass == typeToSkip)
 		return FALSE;
 
 	// Check class source assembly
@@ -6656,13 +6656,13 @@ type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* root)
 		while (argc-- > 0)
 		{
 			genericType = type->data.generic_class->context.class_inst->type_argv[argc];
-			if (type_is_from_assembly(genericType, assembly, root))
+			if (mono_class_from_mono_type(genericType) != typeToSkip && type_is_from_assembly(genericType, assembly, klass))
 				return TRUE;
 		}
 	}
 
 	// Base class
-	if (klass->parent && type_is_from_assembly(mono_class_get_type(klass->parent), assembly, root))
+	if (klass->parent && type_is_from_assembly(mono_class_get_type(klass->parent), assembly, klass))
 		return TRUE;
 
 	return FALSE;
@@ -6675,7 +6675,7 @@ mono_type_is_from_assembly(MonoType *type, MonoAssembly *assembly)
 	if (!type || type->type == MONO_TYPE_END)
 		return FALSE;
 
-	return type_is_from_assembly(type, assembly, mono_class_from_mono_type(type));
+	return type_is_from_assembly(type, assembly, NULL);
 }
 
 /**
