@@ -1431,6 +1431,8 @@ static void
 mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 {
 	HANDLE_FUNCTION_ENTER();
+	gint i;
+	MonoVTable *vt;
 	MonoDomain *domain = mono_domain_get();
 
 	if (!domain->domain)
@@ -1452,6 +1454,15 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 	mono_domain_lock(domain);
 
 	mono_reflection_cleanup_assembly(domain, assembly);
+
+	if (domain->class_vtable_array)	{
+		for (i = 0; i < domain->class_vtable_array->len && domain->class_vtable_array->len > 0; ++i) {
+			vt = ((MonoVTable**)domain->class_vtable_array->pdata)[i];
+			if (mono_type_is_from_assembly(vt->type, assembly)) {
+				g_ptr_array_remove_fast(domain->class_vtable_array, i);
+			}
+		}
+	}
 
 	if (domain->type_hash)
 		mono_g_hash_table_foreach_remove(domain->type_hash, remove_types_from_assembly, assembly);
