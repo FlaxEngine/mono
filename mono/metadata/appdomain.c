@@ -1456,10 +1456,13 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 	mono_reflection_cleanup_assembly(domain, assembly);
 
 	if (domain->class_vtable_array)	{
-		for (i = 0; i < domain->class_vtable_array->len && domain->class_vtable_array->len > 0; ++i) {
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
 			vt = ((MonoVTable**)domain->class_vtable_array->pdata)[i];
-			if (mono_type_is_from_assembly(vt->type, assembly)) {
-				g_ptr_array_remove_fast(domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vt->klass, assembly)) {
+				g_ptr_array_remove_index_fast(domain->class_vtable_array, i);
+				i--;
+				if (domain->class_vtable_array->len == 0)
+					break;
 			}
 		}
 	}
