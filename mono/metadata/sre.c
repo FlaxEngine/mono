@@ -3861,12 +3861,18 @@ free_dynamic_method (void *dynamic_method)
 static gboolean
 is_dynamic_method_from_assembly(MonoObject* obj, gpointer queue_user_data, gpointer user_data)
 {
-	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
 	DynamicMethodReleaseData *release_data = (DynamicMethodReleaseData*)queue_user_data;
 	MonoReflectionDynamicMethod * mb = (MonoReflectionDynamicMethod*)obj;
+
+	if (mono_method_is_from_assembly(release_data->handle, assembly))
+		return TRUE;
 	if (mb == 0)
 		return release_data->assembly == assembly;
-	return mb->module->image == mono_assembly_get_image(assembly);
+	if (mb->module->image == mono_assembly_get_image(assembly))
+		return TRUE;
+
+	return FALSE;
 }
 
 static void
