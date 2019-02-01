@@ -24,6 +24,7 @@
 #include "mini.h"
 #include "aot-runtime.h"
 #include "mini-runtime.h"
+#include "metadata/assembly.h"
 
 #define ALLOW_PARTIAL_SHARING TRUE
 //#define ALLOW_PARTIAL_SHARING FALSE
@@ -3352,6 +3353,39 @@ mini_type_stack_size_full (MonoType *t, guint32 *align, gboolean pinvoke)
 	return size;
 }
 
+static gboolean
+is_method_rgctx_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoMethodRuntimeGenericContext *mrgctx = (MonoMethodRuntimeGenericContext*)key;
+
+	if (mono_class_is_from_assembly(mrgctx->class_vtable->klass, assembly)) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void
+mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
+{
+	HANDLE_FUNCTION_ENTER();
+	MonoDomain *domain = mono_domain_get();
+
+	if (!domain->domain)
+		goto leave;
+
+	mono_loader_lock();
+
+	if (domain->method_rgctx_hash)
+		g_hash_table_foreach_remove(domain->method_rgctx_hash, is_method_rgctx_from_assembly, assembly);
+
+	mono_loader_unlock();
+
+leave:
+	HANDLE_FUNCTION_RETURN();
+}
+
 /*
  * mono_generic_sharing_init:
  *
@@ -3375,6 +3409,7 @@ mono_generic_sharing_init (void)
 	mono_counters_register ("GSHAREDVT num trampolines", MONO_COUNTER_JIT | MONO_COUNTER_INT, &gsharedvt_num_trampolines);
 
 	mono_install_image_unload_hook (mono_class_unregister_image_generic_subclasses, NULL);
+	mono_install_assembly_unload_hook (mono_domain_fire_assembly_unload, NULL);
 
 	mono_os_mutex_init_recursive (&gshared_mutex);
 }
