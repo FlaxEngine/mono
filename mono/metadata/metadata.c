@@ -6637,11 +6637,48 @@ mono_type_get_type (MonoType *type)
 gboolean
 type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* typeToSkip)
 {
-	gint argc;
+	gint i;
 	MonoType *genericType;
-	MonoClass *klass = mono_class_from_mono_type(type);
+	MonoClass *klass = NULL;
 
-	// Prevent issues
+	switch (type->type) {
+	case MONO_TYPE_END:
+	case MONO_TYPE_OBJECT:
+	case MONO_TYPE_VOID:
+	case MONO_TYPE_BOOLEAN:
+	case MONO_TYPE_CHAR:
+	case MONO_TYPE_I1:
+	case MONO_TYPE_U1:
+	case MONO_TYPE_I2:
+	case MONO_TYPE_U2:
+	case MONO_TYPE_I4:
+	case MONO_TYPE_U4:
+	case MONO_TYPE_I:
+	case MONO_TYPE_U:
+	case MONO_TYPE_I8:
+	case MONO_TYPE_U8:
+	case MONO_TYPE_R4:
+	case MONO_TYPE_R8:
+	case MONO_TYPE_STRING:
+	case MONO_TYPE_TYPEDBYREF:
+		break;
+	case MONO_TYPE_ARRAY:
+	case MONO_TYPE_PTR:
+	case MONO_TYPE_FNPTR:
+	case MONO_TYPE_SZARRAY:
+	case MONO_TYPE_CLASS:
+	case MONO_TYPE_VALUETYPE:
+	case MONO_TYPE_GENERICINST:
+	case MONO_TYPE_MVAR:
+	case MONO_TYPE_VAR:
+		klass = mono_class_from_mono_type(type);
+		break;
+	default:
+		g_warning ("type_is_from_assembly: implement me 0x%02x\n", type->type);
+		g_assert_not_reached ();
+	}
+
+	// Early out
 	if (!klass || klass == typeToSkip)
 		return FALSE;
 
@@ -6649,17 +6686,29 @@ type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* typeToS
 	if (mono_class_get_image(klass)->assembly == assembly)
 		return TRUE;
 
+	// Check array element type
+	if (type->type == MONO_TYPE_SZARRAY) {
+		return type_is_from_assembly(mono_class_get_type(klass->element_class), assembly, typeToSkip);
+	}
 	// Check generic class argument types (recursive)
-	if (type->type == MONO_TYPE_GENERICINST)
-	{
-		argc = type->data.generic_class->context.class_inst->type_argc;
-		while (argc-- > 0)
-		{
-			genericType = type->data.generic_class->context.class_inst->type_argv[argc];
+	else if (type->type == MONO_TYPE_GENERICINST) {
+		i = type->data.generic_class->context.class_inst->type_argc;
+		while (i-- > 0) {
+			genericType = type->data.generic_class->context.class_inst->type_argv[i];
 			if (mono_class_from_mono_type(genericType) != typeToSkip && type_is_from_assembly(genericType, assembly, klass))
 				return TRUE;
 		}
 	}
+    else if(type->type == MONO_TYPE_CLASS) {
+	    // Check interfaces (can inherit from List<T> and contain a generic argument of type from that assembly)
+		for (i = 0; i < klass->interface_count; i++) {
+			if (mono_class_get_type(klass->interfaces [i])->type == MONO_TYPE_GENERICINST)
+			{
+				if (klass->interfaces [i] != typeToSkip && type_is_from_assembly(mono_class_get_type(klass->interfaces [i]), assembly, klass))
+					return TRUE;
+			}
+		}
+    }
 
 	// Base class
 	if (klass->parent && type_is_from_assembly(mono_class_get_type(klass->parent), assembly, klass))
@@ -6672,10 +6721,7 @@ type_is_from_assembly(MonoType *type, MonoAssembly *assembly, MonoClass* typeToS
 gboolean
 mono_type_is_from_assembly(MonoType *type, MonoAssembly *assembly)
 {
-	if (!type || type->type == MONO_TYPE_END)
-		return FALSE;
-
-	return type_is_from_assembly(type, assembly, NULL);
+	return type && type_is_from_assembly(type, assembly, NULL);
 }
 
 /**
