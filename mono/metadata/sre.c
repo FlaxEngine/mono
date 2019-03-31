@@ -3863,7 +3863,7 @@ is_dynamic_method_from_assembly(MonoObject* obj, gpointer queue_user_data, gpoin
 {
 	MonoAssembly *assembly = (MonoAssembly*)user_data;
 	DynamicMethodReleaseData *release_data = (DynamicMethodReleaseData*)queue_user_data;
-	MonoReflectionDynamicMethod * mb = (MonoReflectionDynamicMethod*)obj;
+	MonoReflectionDynamicMethod *mb = (MonoReflectionDynamicMethod*)obj;
 
 	if (mono_method_is_from_assembly(release_data->handle, assembly))
 		return TRUE;
