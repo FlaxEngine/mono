@@ -3854,8 +3854,10 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 	MonoJitDomainInfo *info = domain_jit_info(domain);
 
 	//mono_domain_jit_code_hash_lock(domain);
-	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remoce_jit_code_hash_from_assembly, assembly);
+	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remove_jit_code_hash_from_assembly, assembly);
 	//mono_domain_jit_code_hash_unlock(domain);
+
+	// TODO: don't leak memory here - free seq points and other data when removing from hash tables
 
 	mono_image_lock(assembly->image);
 	

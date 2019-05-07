@@ -380,6 +380,47 @@ mono_check_corlib_version (void)
 	return NULL;
 }
 
+static void
+clear_cached_vtable (MonoVTable *vtable)
+{
+	MonoClass *klass = vtable->klass;
+	MonoDomain *domain = vtable->domain;
+	MonoClassRuntimeInfo *runtime_info;
+	void *data;
+
+	runtime_info = klass->runtime_info;
+	if (runtime_info && runtime_info->max_domain >= domain->domain_id)
+		runtime_info->domain_vtables [domain->domain_id] = NULL;
+	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
+		mono_gc_free_fixed (data);
+}
+
+static G_GNUC_UNUSED void
+zero_static_data (MonoVTable *vtable)
+{
+	MonoClass *klass = vtable->klass;
+	void *data;
+
+	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
+		mono_gc_bzero_aligned (data, mono_class_data_size (klass));
+}
+
+static void
+deregister_reflection_info_roots_from_list (MonoImage *image)
+{
+	GSList *list = image->reflection_info_unregister_classes;
+
+	while (list) {
+		MonoClass *klass = (MonoClass *)list->data;
+
+		mono_class_free_ref_info (klass);
+
+		list = list->next;
+	}
+
+	image->reflection_info_unregister_classes = NULL;
+}
+
 /**
  * mono_context_init:
  * \param domain The domain where the \c System.Runtime.Remoting.Context.Context is initialized
@@ -1432,7 +1473,7 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 {
 	HANDLE_FUNCTION_ENTER();
 	gint i;
-	MonoVTable *vt;
+	MonoVTable *vtable;
 	MonoDomain *domain = mono_domain_get();
 
 	if (!domain->domain)
@@ -1456,9 +1497,60 @@ mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
 	mono_reflection_cleanup_assembly(domain, assembly);
 
 	if (domain->class_vtable_array)	{
+
+#if 0
+		// vtables printing
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "==============================================================================================================");
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "vtables:");
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "");
+
+		static GHashTable* hashing = 0;
+		if (hashing == 0)
+			hashing = g_hash_table_new (0, 0);
+
 		for (i = 0; i < domain->class_vtable_array->len; ++i) {
-			vt = ((MonoVTable**)domain->class_vtable_array->pdata)[i];
-			if (mono_class_is_from_assembly(vt->klass, assembly)) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			char* name = g_hash_table_lookup(hashing, vtable);
+			if (!name)
+			{
+				name = malloc(500);
+				sprintf(name, "%s.%s", vtable->klass->name_space, vtable->klass->name);
+				g_hash_table_insert(hashing, vtable, name);
+			}
+			int vv = mono_class_is_from_assembly(vtable->klass, assembly) ? 1 : 0;
+			mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "vtable at %x (klass at %x) of %s.%s -> %d", (gulong)vtable, (gulong)vtable->klass, vtable->klass->name_space, vtable->klass->name, vv);
+		}
+		
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "==============================================================================================================");
+#endif
+
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+				zero_static_data(vtable);
+			}
+		}
+
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+
+				if (((MonoObject*)vtable->type)->vtable->klass != mono_defaults.runtimetype_class)
+					MONO_GC_UNREGISTER_ROOT_IF_MOVING (vtable->type);
+
+				clear_cached_vtable(vtable);
+			}
+		}
+
+		mono_gc_collect (mono_gc_max_generation());
+		
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+				
+				//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "mono_vtable_remove: %s.%s", vtable->klass->name_space, vtable->klass->name);
+
+				//g_ptr_array_remove_index(domain->class_vtable_array, i);
 				g_ptr_array_remove_index_fast(domain->class_vtable_array, i);
 				i--;
 				if (domain->class_vtable_array->len == 0)
@@ -2661,31 +2753,6 @@ mono_domain_is_unloading (MonoDomain *domain)
 		return FALSE;
 }
 
-static void
-clear_cached_vtable (MonoVTable *vtable)
-{
-	MonoClass *klass = vtable->klass;
-	MonoDomain *domain = vtable->domain;
-	MonoClassRuntimeInfo *runtime_info;
-	void *data;
-
-	runtime_info = klass->runtime_info;
-	if (runtime_info && runtime_info->max_domain >= domain->domain_id)
-		runtime_info->domain_vtables [domain->domain_id] = NULL;
-	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
-		mono_gc_free_fixed (data);
-}
-
-static G_GNUC_UNUSED void
-zero_static_data (MonoVTable *vtable)
-{
-	MonoClass *klass = vtable->klass;
-	void *data;
-
-	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
-		mono_gc_bzero_aligned (data, mono_class_data_size (klass));
-}
-
 typedef struct unload_data {
 	gboolean done;
 	MonoDomain *domain;
@@ -2705,22 +2772,6 @@ unload_data_unref (unload_data *data)
 			return;
 		}
 	} while (mono_atomic_cas_i32 (&data->refcount, count - 1, count) != count);
-}
-
-static void
-deregister_reflection_info_roots_from_list (MonoImage *image)
-{
-	GSList *list = image->reflection_info_unregister_classes;
-
-	while (list) {
-		MonoClass *klass = (MonoClass *)list->data;
-
-		mono_class_free_ref_info (klass);
-
-		list = list->next;
-	}
-
-	image->reflection_info_unregister_classes = NULL;
 }
 
 static void

@@ -528,6 +528,18 @@ mono_gc_finalize_domain (MonoDomain *domain)
 	sgen_finalize_if (object_in_domain_predicate, domain);
 }
 
+/**
+ * mono_gc_finalizers_for_assembly:
+ * \param assembly the unloading assembly
+ * Enqueue for finalization all objects that belong to the unloading assembly.
+ * \p suspend is used for early termination of the enqueuing process.
+ */
+void
+mono_gc_finalize_assembly(MonoAssembly* assembly)
+{
+	sgen_finalize_if (object_in_assembly_predicate, assembly);
+}
+
 void
 mono_gc_suspend_finalizers (void)
 {
@@ -740,7 +752,7 @@ mono_gc_clear_assembly(MonoAssembly * assembly)
 		sgen_perform_collection(0, i, "clear assembly", TRUE, FALSE);
 	SGEN_ASSERT(0, !sgen_concurrent_collection_in_progress(), "We just ordered a synchronous collection. Why are we collecting concurrently?");
 
-	// Colect things to finalize
+	// Collect things to finalize
 	major_collector.finish_sweeping();
 	sgen_process_fin_stage_entries();
 

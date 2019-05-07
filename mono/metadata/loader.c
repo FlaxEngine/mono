@@ -2616,6 +2616,7 @@ mono_method_is_from_assembly(MonoMethod *method, MonoAssembly *assembly)
 {
 	guint argc;
 	MonoMethodSignature *sig;
+	MonoMethodInflated *inflated;
 
 	if (!method->klass)
 		return FALSE;
@@ -2627,10 +2628,21 @@ mono_method_is_from_assembly(MonoMethod *method, MonoAssembly *assembly)
 	if (mono_type_is_from_assembly(sig->ret, assembly))
 		return TRUE;
 	argc = sig->param_count;
-	while (argc-- > 0)
-	{
+	while (argc-- > 0) {
 		if (mono_type_is_from_assembly(sig->params[argc], assembly))
 			return TRUE;
+	}
+	
+	if (method->is_inflated) {
+		inflated = (MonoMethodInflated*)method;
+		argc = inflated->context.method_inst ? inflated->context.method_inst->type_argc : 0;
+		while (argc-- > 0) {
+			if (mono_type_is_from_assembly(inflated->context.method_inst->type_argv[argc], assembly))
+            {
+				mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "mono_method_is_from_assembly: %s.%s.%s", method->klass->name_space, method->klass->name, method->name);
+				return TRUE;
+            }
+		}
 	}
 
 	return FALSE;

@@ -3896,18 +3896,22 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 	MonoDomain *domain = mono_domain_get();
 	gboolean is_only_assembly_unload = domain && domain->domain && !mono_domain_is_unloading(domain) && !mono_runtime_is_shutting_down();
 
-	MONO_PROFILER_RAISE (assembly_unloading, (assembly));
-
-	mono_assembly_invoke_unload_hook (assembly);
-
 	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading assembly %s [%p].", assembly->aname.name, assembly);
 
-	mono_debug_close_image (assembly->image);
+	MONO_PROFILER_RAISE (assembly_unloading, (assembly));
 
 	if (is_only_assembly_unload)
 	{
+		mono_gc_collect (mono_gc_max_generation());
+		mono_gc_finalize_assembly (assembly);
+		mono_gc_invoke_finalizers ();
+
 		mono_gc_clear_assembly(assembly);
 	}
+
+	mono_debug_close_image (assembly->image);
+	
+	mono_assembly_invoke_unload_hook (assembly);
 
 	mono_assemblies_lock ();
 	loaded_assemblies = g_list_remove (loaded_assemblies, assembly);
