@@ -29,7 +29,7 @@
 
 static FILE *logFile = NULL;
 static void *logUserData = NULL;
-static wchar_t *logFileName = L".//mono.log";
+static const wchar_t *logFileName = L".//mono.log"; // FIXME double slash
 
 /**
  * mapSyslogLevel:
@@ -103,7 +103,7 @@ mono_log_write_syslog(const char *domain, GLogLevelFlags level, mono_bool hdr, c
 	fflush(logFile);
 
 	if (level & G_LOG_LEVEL_ERROR)
-		abort();
+		g_assert_abort ();
 }
 
 /**

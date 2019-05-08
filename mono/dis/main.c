@@ -858,7 +858,7 @@ dis_method_list (const char *klass_name, MonoImage *m, guint32 start, guint32 en
 		sig = mono_metadata_blob_heap (m, cols [MONO_METHOD_SIGNATURE]);
 		mono_metadata_decode_blob_size (sig, &sig);
 
-		container = mono_metadata_load_generic_params (m, MONO_TOKEN_METHOD_DEF | (i + 1), type_container);
+		container = mono_metadata_load_generic_params (m, MONO_TOKEN_METHOD_DEF | (i + 1), type_container, NULL);
 		if (container) {
 			ERROR_DECL (error);
 			mono_metadata_load_generic_param_constraints_checked (m, MONO_TOKEN_METHOD_DEF | (i + 1), container, error);
@@ -1201,7 +1201,7 @@ dis_type (MonoImage *m, int n, int is_nested, int forward)
 		g_free (esnspace);
 	}
 
-	container = mono_metadata_load_generic_params (m, MONO_TOKEN_TYPE_DEF | (n + 1), NULL);
+	container = mono_metadata_load_generic_params (m, MONO_TOKEN_TYPE_DEF | (n + 1), NULL, NULL);
 	if (container) {
 		ERROR_DECL (error);
 		mono_metadata_load_generic_param_constraints_checked (m, MONO_TOKEN_TYPE_DEF | (n + 1), container, error);
@@ -1631,7 +1631,8 @@ disassemble_file (const char *file)
 		return 1;
 	} else {
 		/* FIXME: is this call necessary? */
-		mono_assembly_load_from_full (img, file, &status, FALSE);
+		/* FIXME: if it's necessary, can it be refonly instead? */
+		mono_assembly_load_from_predicate (img, file, MONO_ASMCTX_DEFAULT, NULL, NULL, &status);
 	}
 
 	setup_filter (img);
@@ -1854,7 +1855,7 @@ try_load_from (MonoAssembly **assembly,
 	*assembly = NULL;
 	fullpath = g_build_filename (path1, path2, path3, path4, NULL);
 	if (g_file_test (fullpath, G_FILE_TEST_IS_REGULAR))
-		*assembly = mono_assembly_open_predicate (fullpath, refonly, FALSE, predicate, user_data, NULL);
+		*assembly = mono_assembly_open_predicate (fullpath, refonly ? MONO_ASMCTX_REFONLY : MONO_ASMCTX_DEFAULT, predicate, user_data, NULL, NULL);
 
 	g_free (fullpath);
 	return (*assembly != NULL);

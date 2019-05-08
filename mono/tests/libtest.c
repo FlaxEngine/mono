@@ -7,6 +7,11 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
+#include <setjmp.h>
+
+#ifndef HOST_WIN32
+#include <dlfcn.h>
+#endif
 
 #ifdef WIN32
 #include <windows.h>
@@ -278,6 +283,25 @@ mono_return_nested_float (void)
 	f.fi.f3 = 3.0;
 	f.f4 = 4.0;
 	return f;
+}
+
+struct Scalar4 {
+	double val[4];
+};
+
+struct Rect {
+	int x;
+	int y;
+	int width;
+	int height;
+};
+
+LIBTEST_API char * STDCALL
+mono_return_struct_4_double (void *ptr, struct Rect rect, struct Scalar4 sc4, int a, int b, int c)
+{
+	char *buffer = (char *) malloc (1024 * sizeof (char));
+	sprintf (buffer, "sc4 = {%.1f, %.1f, %.1f, %.1f }, a=%x, b=%x, c=%x\n", (float) sc4.val [0], (float) sc4.val [1], (float) sc4.val [2], (float) sc4.val [3], a, b, c);
+	return buffer;
 }
 
 LIBTEST_API int STDCALL  
@@ -3640,6 +3664,8 @@ mono_test_marshal_lookup_symbol (const char *symbol_name)
 	return lookup_mono_symbol (symbol_name);
 }
 
+
+// FIXME use runtime headers
 #define MONO_BEGIN_EFRAME { void *__dummy; void *__region_cookie = mono_threads_enter_gc_unsafe_region ? mono_threads_enter_gc_unsafe_region (&__dummy) : NULL;
 #define MONO_END_EFRAME if (mono_threads_exit_gc_unsafe_region) mono_threads_exit_gc_unsafe_region (__region_cookie, &__dummy); }
 
@@ -3655,21 +3681,27 @@ test_method_thunk (int test_id, gpointer test_method_handle, gpointer create_obj
 {
 	int ret = 0;
 
+	// FIXME use runtime headers
 	gpointer (*mono_method_get_unmanaged_thunk)(gpointer)
 		= (gpointer (*)(gpointer))lookup_mono_symbol ("mono_method_get_unmanaged_thunk");
 
+	// FIXME use runtime headers
 	gpointer (*mono_string_new_wrapper)(const char *)
 		= (gpointer (*)(const char *))lookup_mono_symbol ("mono_string_new_wrapper");
 
+	// FIXME use runtime headers
 	char *(*mono_string_to_utf8)(gpointer)
 		= (char *(*)(gpointer))lookup_mono_symbol ("mono_string_to_utf8");
 
+	// FIXME use runtime headers
 	gpointer (*mono_object_unbox)(gpointer)
 		= (gpointer (*)(gpointer))lookup_mono_symbol ("mono_object_unbox");
 
+	// FIXME use runtime headers
 	gpointer (*mono_threads_enter_gc_unsafe_region) (gpointer)
 		= (gpointer (*)(gpointer))lookup_mono_symbol ("mono_threads_enter_gc_unsafe_region");
 
+	// FIXME use runtime headers
 	void (*mono_threads_exit_gc_unsafe_region) (gpointer, gpointer)
 		= (void (*)(gpointer, gpointer))lookup_mono_symbol ("mono_threads_exit_gc_unsafe_region");
 
@@ -5629,6 +5661,24 @@ _mono_test_native_thiscall3 (int arg, int arg2, int arg3)
 	return arg + (arg2^1) + (arg3^2);
 }
 
+LIBTEST_API int STDCALL
+_mono_test_managed_thiscall1 (int (*fn)(int), int arg)
+{
+	return fn(arg);
+}
+
+LIBTEST_API int STDCALL
+_mono_test_managed_thiscall2 (int (*fn)(int,int), int arg, int arg2)
+{
+	return fn(arg, arg2);
+}
+
+LIBTEST_API int STDCALL
+_mono_test_managed_thiscall3 (int (*fn)(int,int,int), int arg, int arg2, int arg3)
+{
+	return fn(arg, arg2, arg3);
+}
+
 #elif defined(__GNUC__)
 
 LIBTEST_API int STDCALL
@@ -5666,6 +5716,27 @@ def_asm_fn(mono_test_native_thiscall3)
 "\txorl $2,%ecx\n"
 "\taddl %ecx,%eax\n"
 "\tret $8\n"
+
+def_asm_fn(mono_test_managed_thiscall1)
+"\tpopl %eax\n"
+"\tpopl %edx\n"
+"\tpopl %ecx\n"
+"\tpushl %eax\n"
+"\tjmp *%edx\n"
+
+def_asm_fn(mono_test_managed_thiscall2)
+"\tpopl %eax\n"
+"\tpopl %edx\n"
+"\tpopl %ecx\n"
+"\tpushl %eax\n"
+"\tjmp *%edx\n"
+
+def_asm_fn(mono_test_managed_thiscall3)
+"\tpopl %eax\n"
+"\tpopl %edx\n"
+"\tpopl %ecx\n"
+"\tpushl %eax\n"
+"\tjmp *%edx\n"
 
 );
 
@@ -7536,4 +7607,174 @@ mono_test_native_to_managed_exception_rethrow (NativeToManagedExceptionRethrowFu
 	pthread_create (&t, NULL, mono_test_native_to_managed_exception_rethrow_thread, func);
 	pthread_join (t, NULL);
 }
+#endif
+
+typedef void (*VoidVoidCallback) (void);
+typedef void (*MonoFtnPtrEHCallback) (guint32 gchandle);
+
+static jmp_buf test_jmp_buf;
+static guint32 test_gchandle;
+
+typedef long long MonoObject;
+typedef MonoObject MonoException;
+typedef int32_t mono_bool;
+
+static int sym_inited = 0;
+static void (*sym_mono_install_ftnptr_eh_callback) (MonoFtnPtrEHCallback);
+static MonoObject* (*sym_mono_gchandle_get_target) (guint32 gchandle);
+static guint32 (*sym_mono_gchandle_new) (MonoObject *, mono_bool pinned);
+static void (*sym_mono_gchandle_free) (guint32 gchandle);
+static void (*sym_mono_raise_exception) (MonoException *ex);
+static void (*sym_mono_domain_unload) (gpointer);
+static void (*sym_mono_threads_exit_gc_safe_region_unbalanced) (gpointer, gpointer *);
+static void (*null_function_ptr) (void);
+
+static void
+mono_test_init_symbols (void)
+{
+	if (sym_inited)
+		return;
+
+	sym_mono_install_ftnptr_eh_callback = (void (*) (MonoFtnPtrEHCallback)) (lookup_mono_symbol ("mono_install_ftnptr_eh_callback"));
+
+	sym_mono_gchandle_get_target = (MonoObject* (*) (guint32 gchandle)) (lookup_mono_symbol ("mono_gchandle_get_target"));
+
+	sym_mono_gchandle_new = (guint32 (*) (MonoObject *, mono_bool)) (lookup_mono_symbol ("mono_gchandle_new"));
+
+	sym_mono_gchandle_free = (void (*) (guint32 gchandle)) (lookup_mono_symbol ("mono_gchandle_free"));
+
+	sym_mono_raise_exception = (void (*) (MonoException *)) (lookup_mono_symbol ("mono_raise_exception"));
+
+	sym_mono_domain_unload = (void (*) (gpointer)) (lookup_mono_symbol ("mono_domain_unload"));
+
+	sym_mono_threads_exit_gc_safe_region_unbalanced = (void (*) (gpointer, gpointer *)) (lookup_mono_symbol ("mono_threads_exit_gc_safe_region_unbalanced"));
+
+	sym_inited = 1;
+}
+
+
+static void
+mono_test_longjmp_callback (guint32 gchandle)
+{
+	test_gchandle = gchandle;
+	longjmp (test_jmp_buf, 1);
+}
+
+LIBTEST_API void STDCALL
+mono_test_setjmp_and_call (VoidVoidCallback managedCallback, intptr_t *out_handle)
+{
+	mono_test_init_symbols ();
+	if (setjmp (test_jmp_buf) == 0) {
+		*out_handle = 0;
+		sym_mono_install_ftnptr_eh_callback (mono_test_longjmp_callback);
+		managedCallback ();
+		*out_handle = 0; /* Do not expect to return here */
+	} else {
+		sym_mono_install_ftnptr_eh_callback (NULL);
+		*out_handle = test_gchandle;
+	}
+}
+
+LIBTEST_API void STDCALL
+mono_test_marshal_bstr (void *ptr)
+{
+}
+
+static void (*mono_test_capture_throw_callback) (guint32 gchandle, guint32 *exception_out);
+
+static void
+mono_test_ftnptr_eh_callback (guint32 gchandle)
+{
+	guint32 exception_handle = 0;
+
+	g_assert (gchandle != 0);
+	MonoObject *exc = sym_mono_gchandle_get_target (gchandle);
+	sym_mono_gchandle_free (gchandle);
+
+	guint32 handle = sym_mono_gchandle_new (exc, FALSE);
+	mono_test_capture_throw_callback (handle, &exception_handle);
+	sym_mono_gchandle_free (handle);
+
+	g_assert (exception_handle != 0);
+	exc = sym_mono_gchandle_get_target (exception_handle);
+	sym_mono_gchandle_free (exception_handle);
+
+	sym_mono_raise_exception (exc);
+	g_error ("mono_raise_exception should not return");
+}
+
+LIBTEST_API void STDCALL
+mono_test_setup_ftnptr_eh_callback (VoidVoidCallback managed_entry, void (*capture_throw_callback) (guint32, guint32 *))
+{
+	mono_test_init_symbols ();
+	mono_test_capture_throw_callback = capture_throw_callback;
+	sym_mono_install_ftnptr_eh_callback (mono_test_ftnptr_eh_callback);
+	managed_entry ();
+}
+
+LIBTEST_API void STDCALL
+mono_test_cleanup_ftptr_eh_callback (void)
+{
+	mono_test_init_symbols ();
+	sym_mono_install_ftnptr_eh_callback (NULL);
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashSnprintf (void)
+{
+	fprintf (stderr, "Before overwrite\n");
+
+	char buff [1] = { '\0' };
+	char overflow [1] = { 'a' }; // Not null-terminated
+	g_snprintf (buff, sizeof(buff) * 10, "THISSHOULDOVERRUNTERRIBLY%s", overflow);
+	g_snprintf ((char *) GINT_TO_POINTER(-1), sizeof(buff) * 10, "THISSHOULDOVERRUNTERRIBLY%s", overflow);
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashDladdr (void)
+{
+#ifndef HOST_WIN32
+	dlopen (GINT_TO_POINTER(-1), -1);
+#endif
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashMalloc (void)
+{
+	void *mem = malloc (sizeof (char) * 10);
+	memset (mem, sizeof (mem) * 10, 'A');
+	int x = 100;
+	g_free (&x);
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashNullFp (void)
+{
+	null_function_ptr ();
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashDomainUnload (void)
+{
+	mono_test_init_symbols ();
+	sym_mono_domain_unload (GINT_TO_POINTER (-1));
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashUnbalancedGCSafe (void)
+{
+	mono_test_init_symbols ();
+	gpointer foo = GINT_TO_POINTER (-1);
+	gpointer bar = GINT_TO_POINTER (-2);
+	sym_mono_threads_exit_gc_safe_region_unbalanced (foo, &bar);
+}
+
+LIBTEST_API void STDCALL
+mono_test_MerpCrashUnhandledExceptionHook (void)
+{
+	g_assert_not_reached ();
+}
+
+#ifdef __cplusplus
+} // extern C
 #endif

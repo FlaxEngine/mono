@@ -7,8 +7,6 @@
 
 #include <glib.h>
 
-G_BEGIN_DECLS
-
 #ifndef HOST_WIN32
 
 #define WAIT_FAILED        ((gint) 0xFFFFFFFF)
@@ -51,12 +49,10 @@ typedef struct pollfd {
 } WSAPOLLFD, *PWSAPOLLFD, *LPWSAPOLLFD;
 #endif
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
 #include <mswsock.h>
 #endif
 
 #endif /* HOST_WIN32 */
-
-G_END_DECLS
 
 #endif /* __MONO_UTILS_W32API_H__ */

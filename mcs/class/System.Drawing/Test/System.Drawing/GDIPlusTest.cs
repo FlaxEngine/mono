@@ -35,6 +35,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using NUnit.Framework;
 
+using MonoTests.Helpers;
+
 namespace MonoTests.System.Drawing {
 
 	[TestFixture]
@@ -236,7 +238,6 @@ namespace MonoTests.System.Drawing {
 
 			Rectangle rect = new Rectangle (2, 2, 5, 5);
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipBitmapLockBits (bmp, ref rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb, bd), "locked");
-			Assert.AreEqual (Status.Win32Error, GDIPlus.GdipBitmapLockBits (bmp, ref rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb, bd), "second lock");
 
 			Assert.AreEqual (rect.Width, bd.Width, "Width");
 			Assert.AreEqual (rect.Height, bd.Height, "Height");
@@ -842,7 +843,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void Icon ()
 		{
-			string filename = TestBitmap.getInFile ("bitmaps/64x64x256.ico");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/64x64x256.ico");
 			IntPtr bitmap;
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipCreateBitmapFromFile (filename, out bitmap), "GdipCreateBitmapFromFile");
 			try {
@@ -885,7 +886,7 @@ namespace MonoTests.System.Drawing {
 		public void FromFile_IndexedBitmap ()
 		{
 			// despite it's name it's a 4bpp indexed bitmap
-			string filename = TestBitmap.getInFile ("bitmaps/almogaver1bit.bmp");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/almogaver1bit.bmp");
 			IntPtr graphics;
 
 			IntPtr image;
@@ -1450,20 +1451,9 @@ namespace MonoTests.System.Drawing {
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipDisposeImage (image), "GdipDisposeImage");
 		}
 
-		// Get the input directory depending on the runtime
-		internal string getInFile (string file)
-		{
-			string sRslt = Path.GetFullPath ("../System.Drawing/" + file);
-
-			if (!File.Exists (sRslt))
-				sRslt = "Test/System.Drawing/" + file;
-
-			return sRslt;
-		}
-
 		private void CheckMetafileHeader (MetafileHeader header)
 		{
-			MetafileHeader mh1 = new Metafile (getInFile ("bitmaps/telescope_01.wmf")).GetMetafileHeader ();
+			MetafileHeader mh1 = new Metafile (TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf")).GetMetafileHeader ();
 			// compare MetafileHeader
 			Assert.AreEqual (mh1.Bounds.X, header.Bounds.X, "Bounds.X");
 			Assert.AreEqual (mh1.Bounds.Y, header.Bounds.Y, "Bounds.Y");
@@ -1492,7 +1482,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void Metafile ()
 		{
-			string filename = getInFile ("bitmaps/telescope_01.wmf");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf");
 			IntPtr metafile = IntPtr.Zero;
 
 			Assert.AreEqual (Status.InvalidParameter, GDIPlus.GdipCreateMetafileFromFile (null, out metafile), "GdipCreateMetafileFromFile(null)");
@@ -1515,7 +1505,7 @@ namespace MonoTests.System.Drawing {
 //				Assert.AreEqual (Status.InvalidParameter, GDIPlus.GdipGetMetafileHeaderFromMetafile (metafile, IntPtr.Zero), "GdipGetMetafileHeaderFromMetafile(metafile,null)");
 				Assert.AreEqual (Status.Ok, GDIPlus.GdipGetMetafileHeaderFromMetafile (metafile, header), "GdipGetMetafileHeaderFromMetafile(metafile,header)");
 
-				MetafileHeader mh2 = new Metafile (getInFile ("bitmaps/telescope_01.wmf")).GetMetafileHeader ();
+				MetafileHeader mh2 = new Metafile (TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf")).GetMetafileHeader ();
 				Marshal.PtrToStructure (header, mh2);
 				CheckMetafileHeader (mh2);
 			}
@@ -1529,7 +1519,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void Metafile_GetMetafileHeaderFromFile ()
 		{
-			string filename = getInFile ("bitmaps/telescope_01.wmf");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf");
 
 			int size = Marshal.SizeOf (typeof (MetafileHeader));
 			IntPtr ptr = Marshal.AllocHGlobal (size);
@@ -1540,7 +1530,7 @@ namespace MonoTests.System.Drawing {
 //				Assert.AreEqual (Status.InvalidParameter, GDIPlus.GdipGetMetafileHeaderFromFile (filename, IntPtr.Zero), "GdipGetMetafileHeaderFromFile(file,null)");
 				Assert.AreEqual (Status.Ok, GDIPlus.GdipGetMetafileHeaderFromFile (filename, ptr), "GdipGetMetafileHeaderFromFile(file,ptr)");
 
-				MetafileHeader header = new Metafile (getInFile ("bitmaps/telescope_01.wmf")).GetMetafileHeader ();
+				MetafileHeader header = new Metafile (TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf")).GetMetafileHeader ();
 				Marshal.PtrToStructure (ptr, header);
 				CheckMetafileHeader (header);
 			}
@@ -1552,7 +1542,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void Metafile_Hemf ()
 		{
-			string filename = getInFile ("bitmaps/telescope_01.wmf");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf");
 			IntPtr metafile = IntPtr.Zero;
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipCreateMetafileFromFile (filename, out metafile), "GdipCreateMetafileFromFile");
 
@@ -1689,7 +1679,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void MetafileAsImage_InImageAPI ()
 		{
-			string filename = getInFile ("bitmaps/telescope_01.wmf");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf");
 			IntPtr image = IntPtr.Zero;
 
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipLoadImageFromFile (filename, out image), "GdipLoadImageFromFile");
@@ -1704,7 +1694,7 @@ namespace MonoTests.System.Drawing {
 		[Test]
 		public void Metafile_InImageAPI ()
 		{
-			string filename = getInFile ("bitmaps/telescope_01.wmf");
+			string filename = TestResourceHelper.GetFullPathOfResource ("Test/System.Drawing/bitmaps/telescope_01.wmf");
 			IntPtr metafile = IntPtr.Zero;
 
 			Assert.AreEqual (Status.Ok, GDIPlus.GdipCreateMetafileFromFile (filename, out metafile), "GdipCreateMetafileFromFile");

@@ -20,8 +20,6 @@ System.Security.Policy/NetCodeGroupTest.cs
 System.Security.Policy/PermissionRequestEvidenceTest.cs
 System.Security.Policy/PolicyLevelTest.cs
 System.Security.Policy/PolicyStatementTest.cs
-System.Security.Policy/PublisherMembershipConditionTest.cs
-System.Security.Policy/PublisherTest.cs
 System.Security.Policy/SiteMembershipConditionTest.cs
 System.Security.Policy/SiteTest.cs
 System.Security.Policy/StrongNameMembershipConditionTest.cs
@@ -41,6 +39,7 @@ System.Runtime.Remoting/ContextTest.cs
 System.Runtime.Remoting/RemotingConfigurationTest.cs
 System.Runtime.Remoting/SoapServicesTest.cs
 System.Runtime.Remoting/SynchronizationAttributeTest.cs
+System.Runtime.Remoting/RemotingServicesTest.cs
 System.Security.AccessControl/AuthorizationRuleTest.cs
 System.Security.AccessControl/CommonAceTest.cs
 System.Security.AccessControl/CommonAclTest.cs
@@ -120,8 +119,6 @@ System.Security.Policy/NetCodeGroupTest.cs
 System.Security.Policy/PermissionRequestEvidenceTest.cs
 System.Security.Policy/PolicyLevelTest.cs
 System.Security.Policy/PolicyStatementTest.cs
-System.Security.Policy/PublisherMembershipConditionTest.cs
-System.Security.Policy/PublisherTest.cs
 System.Security.Policy/SiteMembershipConditionTest.cs
 System.Security.Policy/SiteTest.cs
 System.Security.Policy/StrongNameMembershipConditionTest.cs

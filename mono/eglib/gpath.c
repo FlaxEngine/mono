@@ -97,9 +97,9 @@ strrchr_seperator (const gchar* filename)
 #endif
 	char *p;
 
-	p = strrchr (filename, G_DIR_SEPARATOR);
+	p = (char*)strrchr (filename, G_DIR_SEPARATOR);
 #ifdef G_OS_WIN32
-	p2 = strrchr (filename, '/');
+	p2 = (char*)strrchr (filename, '/');
 	if (p2 > p)
 		p = p2;
 #endif
@@ -224,13 +224,13 @@ g_find_program_in_path (const gchar *program)
 	char *save = NULL;
 #ifdef G_OS_WIN32
 	char *program_exe;
-	char *suffix_list[5] = {".exe",".cmd",".bat",".com",NULL};
+	static char const * const suffix_list[5] = {".exe",".cmd",".bat",".com",NULL};
 	int listx;
 	gboolean hasSuffix;
 #endif
 
 	g_return_val_if_fail (program != NULL, NULL);
-	x = p = g_strdup (g_getenv ("PATH"));
+	x = p = g_getenv ("PATH");
 
 	if (x == NULL || *x == '\0') {
 		curdir = g_get_current_dir ();
@@ -251,11 +251,13 @@ g_find_program_in_path (const gchar *program)
 		
 		x = NULL;
 		probe_path = g_build_path (G_DIR_SEPARATOR_S, l, program, NULL);
-		if (access (probe_path, X_OK) == 0){ /* FIXME: on windows this is just a read permissions test */
+#ifdef HAVE_ACCESS
+		if (g_access (probe_path, X_OK) == 0){ /* FIXME: on windows this is just a read permissions test */
 			g_free (curdir);
 			g_free (p);
 			return probe_path;
 		}
+#endif
 		g_free (probe_path);
 
 #ifdef G_OS_WIN32
@@ -265,12 +267,14 @@ g_find_program_in_path (const gchar *program)
 			while (suffix_list[listx]) {
 				program_exe = g_strjoin(NULL,program,suffix_list[listx],NULL);
 				probe_path = g_build_path (G_DIR_SEPARATOR_S, l, program_exe, NULL);
-				if (access (probe_path, X_OK) == 0){ /* FIXME: on windows this is just a read permissions test */
+#ifdef HAVE_ACCESS
+				if (g_access (probe_path, X_OK) == 0){ /* FIXME: on windows this is just a read permissions test */
 					g_free (curdir);
 					g_free (p);
 					g_free (program_exe);
 					return probe_path;
 				}
+#endif
 				listx++;
 				g_free (probe_path);
 				g_free (program_exe);

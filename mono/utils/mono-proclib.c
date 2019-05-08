@@ -20,6 +20,11 @@
 #include <sched.h>
 #endif
 
+#include <utils/mono-mmap.h>
+#include <utils/strenc.h>
+#include <utils/mono-io-portability.h>
+#include <utils/mono-logger-internals.h>
+
 #if defined(_POSIX_VERSION)
 #ifdef HAVE_SYS_ERRNO_H
 #include <sys/errno.h>
@@ -32,10 +37,15 @@
 #ifdef HAVE_SYS_SYSCTL_H
 #include <sys/sysctl.h>
 #endif
+#ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
+#endif
 #endif
 #if defined(__HAIKU__)
 #include <os/kernel/OS.h>
+#endif
+#if defined(_AIX)
+#include <procinfo.h>
 #endif
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <sys/proc.h>
@@ -174,6 +184,44 @@ mono_process_list (int *size)
 	*size = i;
 
 	return buf;
+#elif defined(_AIX)
+	void **buf = NULL;
+	struct procentry64 *procs = NULL;
+	int count = 0;
+	int i = 0;
+	pid_t pid = 1; // start at 1, 0 is a null process (???)
+
+	// count number of procs + compensate for new ones forked in while we do it.
+	// (it's not an atomic operation) 1000000 is the limit IBM ps seems to use
+	// when I inspected it under truss. the second call we do to getprocs64 will
+	// then only allocate what we need, instead of allocating some obscenely large
+	// array on the heap.
+	count = getprocs64(NULL, sizeof (struct procentry64), NULL, 0, &pid, 1000000);
+	if (count < 1)
+		goto cleanup;
+	count += 10;
+	pid = 1; // reset the pid cookie
+
+	// 5026 bytes is the ideal size for the C struct. you may not like it, but
+	// this is what peak allocation looks like
+	procs = g_calloc (count, sizeof (struct procentry64));
+	// the man page recommends you do this in a loop, but you can also just do it
+	// in one shot; again, like what ps does. let the returned count (in case it's
+	// less) be what we then allocate the array of pids from (in case of ANOTHER
+	// system-wide race condition with processes)
+	count = getprocs64 (procs, sizeof (struct procentry64), NULL, 0, &pid, count);
+	if (count < 1 || procs == NULL)
+		goto cleanup;
+	buf = g_calloc (count, sizeof (void*));
+	for (i = 0; i < count; i++) {
+		buf[i] = GINT_TO_POINTER (procs[i].pi_pid);
+	}
+	*size = i;
+
+cleanup:
+	if (procs)
+		g_free (procs);
+	return buf;
 #else
 	const char *name;
 	void **buf = NULL;
@@ -306,6 +354,14 @@ mono_process_get_name (gpointer pid, char *buf, int len)
 	if (sysctl_kinfo_proc (pid, &processi))
 		memcpy (buf, processi.kinfo_name_member, len - 1);
 
+	return buf;
+#elif defined(_AIX)
+	struct procentry64 proc;
+	pid_t newpid = GPOINTER_TO_INT (pid);
+
+	if (getprocs64 (&proc, sizeof (struct procentry64), NULL, 0, &newpid, 1) == 1) {
+		g_strlcpy (buf, proc.pi_comm, len - 1);
+	}
 	return buf;
 #else
 	char fname [128];
@@ -519,7 +575,7 @@ get_user_hz (void)
 {
 	static int user_hz = 0;
 	if (user_hz == 0) {
-#ifdef _SC_CLK_TCK
+#if defined (_SC_CLK_TCK) && defined (HAVE_SYSCONF)
 		user_hz = sysconf (_SC_CLK_TCK);
 #endif
 		if (user_hz == 0)
@@ -778,7 +834,7 @@ mono_cpu_count (void)
  * [5] https://github.com/dotnet/coreclr/blob/7058273693db2555f127ce16e6b0c5b40fb04867/src/pal/src/misc/sysinfo.cpp#L148
  */
 
-#ifdef _SC_NPROCESSORS_CONF
+#if defined (_SC_NPROCESSORS_CONF) && defined (HAVE_SYSCONF)
 	{
 		int count = sysconf (_SC_NPROCESSORS_CONF);
 		if (count > 0)
@@ -795,7 +851,7 @@ mono_cpu_count (void)
 			return CPU_COUNT (&set);
 	}
 #endif
-#ifdef _SC_NPROCESSORS_ONLN
+#if defined (_SC_NPROCESSORS_ONLN) && defined (HAVE_SYSCONF)
 	{
 		int count = sysconf (_SC_NPROCESSORS_ONLN);
 		if (count > 0)
@@ -916,6 +972,124 @@ mono_atexit (void (*func)(void))
 #endif
 }
 
+#ifndef HOST_WIN32
+
+gboolean
+mono_pe_file_time_date_stamp (gunichar2 *filename, guint32 *out)
+{
+	void *map_handle;
+	gint32 map_size;
+	gpointer file_map = mono_pe_file_map (filename, &map_size, &map_handle);
+	if (!file_map)
+		return FALSE;
+
+	/* Figure this out when we support 64bit PE files */
+	if (1) {
+		IMAGE_DOS_HEADER *dos_header = (IMAGE_DOS_HEADER *)file_map;
+		if (dos_header->e_magic != IMAGE_DOS_SIGNATURE) {
+			mono_pe_file_unmap (file_map, map_handle);
+			return FALSE;
+		}
+
+		IMAGE_NT_HEADERS32 *nt_headers = (IMAGE_NT_HEADERS32 *)((guint8 *)file_map + GUINT32_FROM_LE (dos_header->e_lfanew));
+		if (nt_headers->Signature != IMAGE_NT_SIGNATURE) {
+			mono_pe_file_unmap (file_map, map_handle);
+			return FALSE;
+		}
+
+		*out = nt_headers->FileHeader.TimeDateStamp;
+	} else {
+		g_assert_not_reached ();
+	}
+
+	mono_pe_file_unmap (file_map, map_handle);
+	return TRUE;
+}
+
+gpointer
+mono_pe_file_map (gunichar2 *filename, gint32 *map_size, void **handle)
+{
+	gchar *filename_ext = NULL;
+	gchar *located_filename = NULL;
+	int fd = -1;
+	struct stat statbuf;
+	gpointer file_map = NULL;
+
+	/* According to the MSDN docs, a search path is applied to
+	 * filename.  FIXME: implement this, for now just pass it
+	 * straight to open
+	 */
+
+	filename_ext = mono_unicode_to_external (filename);
+	if (filename_ext == NULL) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: unicode conversion returned NULL", __func__);
+
+		goto exit;
+	}
+
+	fd = open (filename_ext, O_RDONLY, 0);
+	if (fd == -1 && (errno == ENOENT || errno == ENOTDIR) && IS_PORTABILITY_SET) {
+		gint saved_errno = errno;
+
+		located_filename = mono_portability_find_file (filename_ext, TRUE);
+		if (!located_filename) {
+			errno = saved_errno;
+
+			mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: Error opening file %s (3): %s", __func__, filename_ext, strerror (errno));
+			goto error;
+		}
+
+		fd = open (located_filename, O_RDONLY, 0);
+		if (fd == -1) {
+			mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: Error opening file %s (3): %s", __func__, filename_ext, strerror (errno));
+			goto error;
+		}
+	}
+	else if (fd == -1) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: Error opening file %s (3): %s", __func__, filename_ext, strerror (errno));
+		goto error;
+	}
+
+	if (fstat (fd, &statbuf) == -1) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: Error stat()ing file %s: %s", __func__, filename_ext, strerror (errno));
+		goto error;
+	}
+	*map_size = statbuf.st_size;
+
+	/* Check basic file size */
+	if (statbuf.st_size < sizeof(IMAGE_DOS_HEADER)) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: File %s is too small: %lld", __func__, filename_ext, (long long) statbuf.st_size);
+
+		goto exit;
+	}
+
+	file_map = mono_file_map (statbuf.st_size, MONO_MMAP_READ | MONO_MMAP_PRIVATE, fd, 0, handle);
+	if (file_map == NULL) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_IO_LAYER_PROCESS, "%s: Error mmap()int file %s: %s", __func__, filename_ext, strerror (errno));
+		goto error;
+	}
+exit:
+	if (fd != -1)
+		close (fd);
+	g_free (located_filename);
+	g_free (filename_ext);
+	return file_map;
+error:
+	goto exit;
+}
+
+void
+mono_pe_file_unmap (gpointer file_map, void *handle)
+{
+	gint res;
+
+	res = mono_file_unmap (file_map, handle);
+	if (G_UNLIKELY (res != 0))
+		g_error ("%s: mono_file_unmap failed, error: \"%s\" (%d)", __func__, g_strerror (errno), errno);
+}
+
+#endif /* HOST_WIN32 */
+
 /*
  * This function returns the cpu usage in percentage,
  * normalized on the number of cores.
@@ -930,6 +1104,7 @@ gint32
 mono_cpu_usage (MonoCpuUsageState *prev)
 {
 	gint32 cpu_usage = 0;
+#ifdef HAVE_GETRUSAGE
 	gint64 cpu_total_time;
 	gint64 cpu_busy_time;
 	struct rusage resource_usage;
@@ -957,7 +1132,7 @@ mono_cpu_usage (MonoCpuUsageState *prev)
 
 	if (cpu_total_time > 0 && cpu_busy_time > 0)
 		cpu_usage = (gint32)(cpu_busy_time * 100 / cpu_total_time);
-
+#endif
 	return cpu_usage;
 }
 #endif /* !HOST_WIN32 */

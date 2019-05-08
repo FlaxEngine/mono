@@ -28,8 +28,6 @@
 #include "debugger-agent.h"
 #include "jit-icalls.h"
 
-#define ALIGN_TO(val,align) ((((guint64)val) + ((align) - 1)) & ~((align) - 1))
-
 /*
  * mono_arch_get_unbox_trampoline:
  * @m: method pointer
@@ -51,7 +49,7 @@ mono_arch_get_unbox_trampoline (MonoMethod *m, gpointer addr)
 
 	unwind_ops = mono_arch_get_cie_program ();
 
-	x86_alu_membase_imm (code, X86_ADD, X86_ESP, this_pos, sizeof (MonoObject));
+	x86_alu_membase_imm (code, X86_ADD, X86_ESP, this_pos, MONO_ABI_SIZEOF (MonoObject));
 	x86_jump_code (code, addr);
 	g_assert ((code - start) < size);
 
@@ -142,42 +140,6 @@ mono_arch_patch_plt_entry (guint8 *code, gpointer *got, mgreg_t *regs, guint8 *a
 	*(guint8**)((guint8*)got + offset) = addr;
 }
 
-static gpointer
-get_vcall_slot (guint8 *code, mgreg_t *regs, int *displacement)
-{
-	const int kBufSize = 8;
-	guint8 buf [64];
-	guint8 reg = 0;
-	gint32 disp = 0;
-
-	mono_breakpoint_clean_code (NULL, code, kBufSize, buf, kBufSize);
-	code = buf + 8;
-
-	*displacement = 0;
-
-	if ((code [0] == 0xff) && ((code [1] & 0x18) == 0x10) && ((code [1] >> 6) == 2)) {
-		reg = code [1] & 0x07;
-		disp = *((gint32*)(code + 2));
-	} else {
-		g_assert_not_reached ();
-		return NULL;
-	}
-
-	*displacement = disp;
-	return (gpointer)regs [reg];
-}
-
-static gpointer*
-get_vcall_slot_addr (guint8* code, mgreg_t *regs)
-{
-	gpointer vt;
-	int displacement;
-	vt = get_vcall_slot (code, regs, &displacement);
-	if (!vt)
-		return NULL;
-	return (gpointer*)((char*)vt + displacement);
-}
-
 guchar*
 mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInfo **info, gboolean aot)
 {
@@ -196,34 +158,34 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 	 */
 
 	/* Compute frame offsets relative to the frame pointer %ebp */
-	arg_offset = sizeof (mgreg_t);
-	caller_ip_offset = 2 * sizeof (mgreg_t);
+	arg_offset = sizeof (target_mgreg_t);
+	caller_ip_offset = 2 * sizeof (target_mgreg_t);
 	offset = 0;
 	offset += sizeof (MonoLMF);
 	lmf_offset = -offset;
-	offset += X86_NREG * sizeof (mgreg_t);
+	offset += X86_NREG * sizeof (target_mgreg_t);
 	regarray_offset = -offset;
 	/* Argument area */
-	offset += 4 * sizeof (mgreg_t);
+	offset += 4 * sizeof (target_mgreg_t);
 	frame_size = ALIGN_TO (offset, MONO_ARCH_FRAME_ALIGNMENT);
 
 	/* ret addr and arg are on the stack */
-	cfa_offset = 2 * sizeof (mgreg_t);
+	cfa_offset = 2 * sizeof (target_mgreg_t);
 	mono_add_unwind_op_def_cfa (unwind_ops, code, buf, X86_ESP, cfa_offset);
 	// IP saved at CFA - 4
 	mono_add_unwind_op_offset (unwind_ops, code, buf, X86_NREG, -4);
 
 	/* Allocate frame */
 	x86_push_reg (code, X86_EBP);
-	cfa_offset += sizeof (mgreg_t);
+	cfa_offset += sizeof (target_mgreg_t);
 	mono_add_unwind_op_def_cfa_offset (unwind_ops, code, buf, cfa_offset);
 	mono_add_unwind_op_offset (unwind_ops, code, buf, X86_EBP, -cfa_offset);
 
-	x86_mov_reg_reg (code, X86_EBP, X86_ESP, sizeof (mgreg_t));
+	x86_mov_reg_reg (code, X86_EBP, X86_ESP);
 	mono_add_unwind_op_def_cfa_reg (unwind_ops, code, buf, X86_EBP);
 
 	/* There are three words on the stack, adding + 4 aligns the stack to 16, which is needed on osx */
-	x86_alu_reg_imm (code, X86_SUB, X86_ESP, frame_size + sizeof (mgreg_t));
+	x86_alu_reg_imm (code, X86_SUB, X86_ESP, frame_size + sizeof (target_mgreg_t));
 
 	/* Save all registers */
 	for (i = X86_EAX; i <= X86_EDI; ++i) {
@@ -232,46 +194,46 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 		if (i == X86_EBP) {
 			/* Save original ebp */
 			/* EAX is already saved */
-			x86_mov_reg_membase (code, X86_EAX, X86_EBP, 0, sizeof (mgreg_t));
+			x86_mov_reg_membase (code, X86_EAX, X86_EBP, 0, sizeof (target_mgreg_t));
 			reg = X86_EAX;
 		} else if (i == X86_ESP) {
 			/* Save original esp */
 			/* EAX is already saved */
-			x86_mov_reg_reg (code, X86_EAX, X86_EBP, sizeof (mgreg_t));
+			x86_mov_reg_reg (code, X86_EAX, X86_EBP);
 			/* Saved ebp + trampoline arg + return addr */
-			x86_alu_reg_imm (code, X86_ADD, X86_EAX, 3 * sizeof (mgreg_t));
+			x86_alu_reg_imm (code, X86_ADD, X86_EAX, 3 * sizeof (target_mgreg_t));
 			reg = X86_EAX;
 		}
-		x86_mov_membase_reg (code, X86_EBP, regarray_offset + (i * sizeof (mgreg_t)), reg, sizeof (mgreg_t));
+		x86_mov_membase_reg (code, X86_EBP, regarray_offset + (i * sizeof (target_mgreg_t)), reg, sizeof (target_mgreg_t));
 	}
 
 	/* Setup LMF */
 	/* eip */
 	if (tramp_type == MONO_TRAMPOLINE_JUMP) {
-		x86_mov_membase_imm (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, eip), 0, sizeof (mgreg_t));
+		x86_mov_membase_imm (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, eip), 0, sizeof (target_mgreg_t));
 	} else {
-		x86_mov_reg_membase (code, X86_EAX, X86_EBP, caller_ip_offset, sizeof (mgreg_t));
-		x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, eip), X86_EAX, sizeof (mgreg_t));
+		x86_mov_reg_membase (code, X86_EAX, X86_EBP, caller_ip_offset, sizeof (target_mgreg_t));
+		x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, eip), X86_EAX, sizeof (target_mgreg_t));
 	}
 	/* method */
 	if ((tramp_type == MONO_TRAMPOLINE_JIT) || (tramp_type == MONO_TRAMPOLINE_JUMP)) {
-		x86_mov_reg_membase (code, X86_EAX, X86_EBP, arg_offset, sizeof (mgreg_t));
-		x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, method), X86_EAX, sizeof (mgreg_t));
+		x86_mov_reg_membase (code, X86_EAX, X86_EBP, arg_offset, sizeof (target_mgreg_t));
+		x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, method), X86_EAX, sizeof (target_mgreg_t));
 	} else {
-		x86_mov_membase_imm (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, method), 0, sizeof (mgreg_t));
+		x86_mov_membase_imm (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, method), 0, sizeof (target_mgreg_t));
 	}
 	/* esp */
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_ESP * sizeof (mgreg_t)), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, esp), X86_EAX, sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_ESP * sizeof (target_mgreg_t)), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, esp), X86_EAX, sizeof (target_mgreg_t));
 	/* callee save registers */
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EBX * sizeof (mgreg_t)), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, ebx), X86_EAX, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EDI * sizeof (mgreg_t)), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, edi), X86_EAX, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_ESI * sizeof (mgreg_t)), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, esi), X86_EAX, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EBP * sizeof (mgreg_t)), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, ebp), X86_EAX, sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EBX * sizeof (target_mgreg_t)), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, ebx), X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EDI * sizeof (target_mgreg_t)), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, edi), X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_ESI * sizeof (target_mgreg_t)), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, esi), X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, regarray_offset + (X86_EBP * sizeof (target_mgreg_t)), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, ebp), X86_EAX, sizeof (target_mgreg_t));
 
 	/* Push LMF */
 	/* get the address of lmf for the current thread */
@@ -282,38 +244,38 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 		x86_call_code (code, mono_get_lmf_addr);
 	}
 	/* lmf->lmf_addr = lmf_addr (%eax) */
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, lmf_addr), X86_EAX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, lmf_addr), X86_EAX, sizeof (target_mgreg_t));
 	/* lmf->previous_lmf = *(lmf_addr) */
-	x86_mov_reg_membase (code, X86_ECX, X86_EAX, 0, sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_ECX, X86_EAX, 0, sizeof (target_mgreg_t));
 	/* Signal to mono_arch_unwind_frame () that this is a trampoline frame */
 	x86_alu_reg_imm (code, X86_ADD, X86_ECX, 1);
-	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, previous_lmf), X86_ECX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, previous_lmf), X86_ECX, sizeof (target_mgreg_t));
 	/* *lmf_addr = lmf */
 	x86_lea_membase (code, X86_ECX, X86_EBP, lmf_offset);
-	x86_mov_membase_reg (code, X86_EAX, 0, X86_ECX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_EAX, 0, X86_ECX, sizeof (target_mgreg_t));
 
 	/* Call trampoline function */
 	/* Arg 1 - registers */
 	x86_lea_membase (code, X86_EAX, X86_EBP, regarray_offset);
-	x86_mov_membase_reg (code, X86_ESP, (0 * sizeof (mgreg_t)), X86_EAX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, (0 * sizeof (target_mgreg_t)), X86_EAX, sizeof (target_mgreg_t));
 	/* Arg2 - calling code */
 	if (tramp_type == MONO_TRAMPOLINE_JUMP) {
-		x86_mov_membase_imm (code, X86_ESP, (1 * sizeof (mgreg_t)), 0, sizeof (mgreg_t));
+		x86_mov_membase_imm (code, X86_ESP, (1 * sizeof (target_mgreg_t)), 0, sizeof (target_mgreg_t));
 	} else {
-		x86_mov_reg_membase (code, X86_EAX, X86_EBP, caller_ip_offset, sizeof (mgreg_t));
-		x86_mov_membase_reg (code, X86_ESP, (1 * sizeof (mgreg_t)), X86_EAX, sizeof (mgreg_t));
+		x86_mov_reg_membase (code, X86_EAX, X86_EBP, caller_ip_offset, sizeof (target_mgreg_t));
+		x86_mov_membase_reg (code, X86_ESP, (1 * sizeof (target_mgreg_t)), X86_EAX, sizeof (target_mgreg_t));
 	}
 	/* Arg3 - trampoline argument */
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, arg_offset, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, (2 * sizeof (mgreg_t)), X86_EAX, sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, arg_offset, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, (2 * sizeof (target_mgreg_t)), X86_EAX, sizeof (target_mgreg_t));
 	/* Arg4 - trampoline address */
 	// FIXME:
-	x86_mov_membase_imm (code, X86_ESP, (3 * sizeof (mgreg_t)), 0, sizeof (mgreg_t));
+	x86_mov_membase_imm (code, X86_ESP, (3 * sizeof (target_mgreg_t)), 0, sizeof (target_mgreg_t));
 
 #ifdef __APPLE__
 	/* check the stack is aligned after the ret ip is pushed */
 	/*
-	x86_mov_reg_reg (code, X86_EDX, X86_ESP, 4);
+	x86_mov_reg_reg (code, X86_EDX, X86_ESP);
 	x86_alu_reg_imm (code, X86_AND, X86_EDX, 15);
 	x86_alu_reg_imm (code, X86_CMP, X86_EDX, 0);
 	x86_branch_disp (code, X86_CC_Z, 3, FALSE);
@@ -337,10 +299,10 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 	x86_mov_membase_reg (code, X86_EBP, arg_offset, X86_EAX, 4);
 
 	/* Restore LMF */
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, lmf_addr), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_ECX, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, previous_lmf), sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, lmf_addr), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_ECX, X86_EBP, lmf_offset + G_STRUCT_OFFSET (MonoLMF, previous_lmf), sizeof (target_mgreg_t));
 	x86_alu_reg_imm (code, X86_SUB, X86_ECX, 1);
-	x86_mov_membase_reg (code, X86_EAX, 0, X86_ECX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_EAX, 0, X86_ECX, sizeof (target_mgreg_t));
 
 	/* Check for interruptions */
 	if (aot) {
@@ -385,7 +347,7 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 	} else {
 		x86_mov_reg_imm (code, X86_ECX, (guint8*)mono_get_throw_exception_addr ());
 	}
-	x86_mov_reg_membase (code, X86_ECX, X86_ECX, 0, sizeof(gpointer));
+	x86_mov_reg_membase (code, X86_ECX, X86_ECX, 0, sizeof(target_mgreg_t));
 	x86_jump_reg (code, X86_ECX);
 
 	/* Normal case */
@@ -402,7 +364,7 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 
 	/* Restore frame */
 	x86_leave (code);
-	cfa_offset -= sizeof (mgreg_t);
+	cfa_offset -= sizeof (target_mgreg_t);
 	mono_add_unwind_op_def_cfa (unwind_ops, code, buf, X86_ESP, cfa_offset);
 	mono_add_unwind_op_same_value (unwind_ops, code, buf, X86_EBP);
 
@@ -411,7 +373,7 @@ mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInf
 		x86_mov_reg_membase (code, X86_EAX, X86_ESP, 0, 4);
 		/* The trampoline returns normally, pop the trampoline argument */
 		x86_alu_reg_imm (code, X86_ADD, X86_ESP, 4);
-		cfa_offset -= sizeof (mgreg_t);
+		cfa_offset -= sizeof (target_mgreg_t);
 		mono_add_unwind_op_def_cfa_offset (unwind_ops, code, buf, cfa_offset);
 		x86_ret (code);
 	} else {
@@ -531,7 +493,7 @@ mono_arch_create_rgctx_lazy_fetch_trampoline (guint32 slot, MonoTrampInfo **info
 		code = mono_arch_emit_load_aotconst (buf, code, &ji, MONO_PATCH_INFO_JIT_ICALL_ADDR, g_strdup_printf ("specific_trampoline_lazy_fetch_%u", slot));
 		x86_jump_reg (code, X86_EAX);
 	} else {
-		tramp = mono_arch_create_specific_trampoline (GUINT_TO_POINTER (slot), MONO_TRAMPOLINE_RGCTX_LAZY_FETCH, mono_get_root_domain (), NULL);
+		tramp = (guint8*)mono_arch_create_specific_trampoline (GUINT_TO_POINTER (slot), MONO_TRAMPOLINE_RGCTX_LAZY_FETCH, mono_get_root_domain (), NULL);
 
 		/* jump to the actual trampoline */
 		x86_jump_code (code, tramp);
@@ -594,7 +556,7 @@ void
 mono_arch_invalidate_method (MonoJitInfo *ji, void *func, gpointer func_arg)
 {
 	/* FIXME: This is not thread safe */
-	guint8 *code = ji->code_start;
+	guint8 *code = (guint8*)ji->code_start;
 
 	x86_push_imm (code, func_arg);
 	x86_call_code (code, (guint8*)func);
@@ -654,7 +616,7 @@ mono_arch_get_gsharedvt_arg_trampoline (MonoDomain *domain, gpointer arg, gpoint
  * mono_arch_create_sdb_trampoline:
  *
  *   Return a trampoline which captures the current context, passes it to
- * debugger_agent_single_step_from_context ()/debugger_agent_breakpoint_from_context (),
+ * mini_get_dbg_callbacks ()->single_step_from_context ()/mini_get_dbg_callbacks ()->breakpoint_from_context (),
  * then restores the (potentially changed) context.
  */
 guint8*
@@ -671,7 +633,7 @@ mono_arch_create_sdb_trampoline (gboolean single_step, MonoTrampInfo **info, gbo
 	framesize = 0;
 
 	/* Argument area */
-	framesize += sizeof (mgreg_t);
+	framesize += sizeof (target_mgreg_t);
 
 	framesize = ALIGN_TO (framesize, 8);
 	ctx_offset = framesize;
@@ -690,59 +652,60 @@ mono_arch_create_sdb_trampoline (gboolean single_step, MonoTrampInfo **info, gbo
 	mono_add_unwind_op_def_cfa_offset (unwind_ops, code, buf, cfa_offset);
 	mono_add_unwind_op_offset (unwind_ops, code, buf, X86_EBP, - cfa_offset);
 
-	x86_mov_reg_reg (code, X86_EBP, X86_ESP, sizeof(mgreg_t));
+	x86_mov_reg_reg (code, X86_EBP, X86_ESP);
 	mono_add_unwind_op_def_cfa_reg (unwind_ops, code, buf, X86_EBP);
 	/* The + 8 makes the stack aligned */
 	x86_alu_reg_imm (code, X86_SUB, X86_ESP, framesize + 8);
 
 	/* Initialize a MonoContext structure on the stack */
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eax), X86_EAX, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebx), X86_EBX, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ecx), X86_ECX, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edx), X86_EDX, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, 0, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebp), X86_EAX, sizeof (mgreg_t));
-	x86_mov_reg_reg (code, X86_EAX, X86_EBP, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eax), X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebx), X86_EBX, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ecx), X86_ECX, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edx), X86_EDX, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, 0, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebp), X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_reg_reg (code, X86_EAX, X86_EBP);
 	x86_alu_reg_imm (code, X86_ADD, X86_EAX, cfa_offset);
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esp), X86_ESP, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esi), X86_ESI, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edi), X86_EDI, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_EBP, 4, sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eip), X86_EAX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esp), X86_ESP, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esi), X86_ESI, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edi), X86_EDI, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_EBP, 4, sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eip), X86_EAX, sizeof (target_mgreg_t));
 
 	/* Call the single step/breakpoint function in sdb */
 	x86_lea_membase (code, X86_EAX, X86_ESP, ctx_offset);
-	x86_mov_membase_reg (code, X86_ESP, 0, X86_EAX, sizeof (mgreg_t));
+	x86_mov_membase_reg (code, X86_ESP, 0, X86_EAX, sizeof (target_mgreg_t));
 
 	if (aot) {
 		x86_breakpoint (code);
 	} else {
 		if (single_step)
-			x86_call_code (code, debugger_agent_single_step_from_context);
+			x86_call_code (code, mini_get_dbg_callbacks ()->single_step_from_context);
 		else
-			x86_call_code (code, debugger_agent_breakpoint_from_context);
+			x86_call_code (code, mini_get_dbg_callbacks ()->breakpoint_from_context);
 	}
 
 	/* Restore registers from ctx */
 	/* Overwrite the saved ebp */
-	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebp), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, 0, X86_EAX, sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebp), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, 0, X86_EAX, sizeof (target_mgreg_t));
 	/* Overwrite saved eip */
-	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eip), sizeof (mgreg_t));
-	x86_mov_membase_reg (code, X86_EBP, 4, X86_EAX, sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eax), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EBX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebx), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_ECX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ecx), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EDX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edx), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_ESI, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esi), sizeof (mgreg_t));
-	x86_mov_reg_membase (code, X86_EDI, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edi), sizeof (mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eip), sizeof (target_mgreg_t));
+	x86_mov_membase_reg (code, X86_EBP, 4, X86_EAX, sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EAX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, eax), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EBX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ebx), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_ECX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, ecx), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EDX, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edx), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_ESI, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, esi), sizeof (target_mgreg_t));
+	x86_mov_reg_membase (code, X86_EDI, X86_ESP, ctx_offset + G_STRUCT_OFFSET (MonoContext, edi), sizeof (target_mgreg_t));
 
 	x86_leave (code);
-	cfa_offset -= sizeof (mgreg_t);
+	cfa_offset -= sizeof (target_mgreg_t);
 	mono_add_unwind_op_def_cfa (unwind_ops, code, buf, X86_ESP, cfa_offset);
 	x86_ret (code);
 
 	mono_arch_flush_icache (code, code - buf);
+	MONO_PROFILER_RAISE (jit_code_buffer, (buf, code - buf, MONO_PROFILER_CODE_BUFFER_HELPER, NULL));
 	g_assert (code - buf <= tramp_size);
 
 	const char *tramp_name = single_step ? "sdb_single_step_trampoline" : "sdb_breakpoint_trampoline";
@@ -750,11 +713,3 @@ mono_arch_create_sdb_trampoline (gboolean single_step, MonoTrampInfo **info, gbo
 
 	return buf;
 }
-
-gpointer
-mono_arch_get_interp_to_native_trampoline (MonoTrampInfo **info)
-{
-	g_assert_not_reached ();
-	return NULL;
-}
-

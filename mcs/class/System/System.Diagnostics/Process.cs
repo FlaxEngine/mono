@@ -508,9 +508,12 @@ namespace System.Diagnostics
 			int size = 0;
 
 			for (int i = 0; i < processes.Length; i++) {
+				var process = processes[i];
 				try {
-					if (String.Compare (processName, processes[i].ProcessName, true) == 0)
-						processes [size++] = processes[i];
+					if (String.Compare (processName, process.ProcessName, true) == 0)
+						processes [size++] = process;
+					else
+						process.Dispose();
 				} catch (SystemException) {
 					/* The process might exit between GetProcesses_internal and GetProcessById */
 				}
@@ -687,29 +690,19 @@ namespace System.Diagnostics
 			var procInfo = new ProcInfo ();
 
 			if (startInfo.HaveEnvVars) {
-				List<string> envVariables = null;
-				StringBuilder sb = null;
+				List<string> envVariables = new List<string> ();
 
 				foreach (DictionaryEntry de in startInfo.EnvironmentVariables) {
 					if (de.Value == null)
 						continue;
 
-					if (envVariables == null)
-						envVariables = new List<string> ();
-
-					if (sb == null)
-						sb = new StringBuilder ();
-					else
-						sb.Clear ();
-
-					sb.Append ((string) de.Key);
-					sb.Append ('=');
-					sb.Append ((string) de.Value);
-
-					envVariables.Add (sb.ToString ());
+					envVariables.Add (string.Concat (
+						(string) de.Key,
+						"=",
+						(string) de.Value));
 				}
 
-				procInfo.envVariables = envVariables?.ToArray ();
+				procInfo.envVariables = envVariables.ToArray ();
 			}
 
 			MonoIOError error;
@@ -801,7 +794,7 @@ namespace System.Diagnostics
 			if (startInfo.RedirectStandardOutput) {
 				MonoIO.Close (stdout_write, out error);
 
-				Encoding stdoutEncoding = startInfo.StandardOutputEncoding ?? Console.Out.Encoding;
+				Encoding stdoutEncoding = startInfo.StandardOutputEncoding ?? Console.OutputEncoding;
 
 				standardOutput = new StreamReader (new FileStream (stdout_read, FileAccess.Read, true, 8192), stdoutEncoding, true);
 			}
@@ -809,7 +802,7 @@ namespace System.Diagnostics
 			if (startInfo.RedirectStandardError) {
 				MonoIO.Close (stderr_write, out error);
 
-				Encoding stderrEncoding = startInfo.StandardErrorEncoding ?? Console.Out.Encoding;
+				Encoding stderrEncoding = startInfo.StandardErrorEncoding ?? Console.OutputEncoding;
 
 				standardError = new StreamReader (new FileStream (stderr_read, FileAccess.Read, true, 8192), stderrEncoding, true);
 			}

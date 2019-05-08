@@ -75,7 +75,7 @@ mono_internal_hash_table_insert (MonoInternalHashTable *table,
 void
 mono_internal_hash_table_foreach_remove (MonoInternalHashTable *table, MonoInternalHashRemoveFunc func, gpointer user_data);
 
-void
+gboolean
 mono_internal_hash_table_remove (MonoInternalHashTable *table, gpointer key);
 
 #endif

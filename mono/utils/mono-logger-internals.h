@@ -28,10 +28,12 @@ typedef enum {
 	MONO_TRACE_IO_LAYER_SEMAPHORE = 1 << 13,
 	MONO_TRACE_IO_LAYER_MUTEX     = 1 << 14,
 	MONO_TRACE_IO_LAYER_HANDLE    = 1 << 15,
+	MONO_TRACE_TAILCALL           = 1 << 16,
+	MONO_TRACE_PROFILER           = 1 << 17,
 } MonoTraceMask;
 
-MONO_API extern GLogLevelFlags mono_internal_current_level;
-MONO_API extern MonoTraceMask mono_internal_current_mask;
+MONO_API_DATA GLogLevelFlags mono_internal_current_level;
+MONO_API_DATA MonoTraceMask mono_internal_current_mask;
 
 MONO_API void
 mono_trace_init (void);
@@ -57,10 +59,13 @@ mono_trace_pop (void);
 gboolean
 mono_trace_is_traced (GLogLevelFlags level, MonoTraceMask mask);
 
+#define MONO_TRACE_IS_TRACED(level, mask) \
+	G_UNLIKELY ((level) <= mono_internal_current_level && ((mask) & mono_internal_current_mask))
+
 G_GNUC_UNUSED static void
 mono_tracev (GLogLevelFlags level, MonoTraceMask mask, const char *format, va_list args)
 {
-	if(G_UNLIKELY (level <= mono_internal_current_level && (mask & mono_internal_current_mask)))
+	if (MONO_TRACE_IS_TRACED (level, mask))
 		mono_tracev_inner (level, mask, format, args);
 }
 
@@ -76,7 +81,7 @@ mono_tracev (GLogLevelFlags level, MonoTraceMask mask, const char *format, va_li
 G_GNUC_UNUSED MONO_ATTR_FORMAT_PRINTF(3,4) static void
 mono_trace (GLogLevelFlags level, MonoTraceMask mask, const char *format, ...)
 {
-	if(G_UNLIKELY (level <= mono_internal_current_level && (mask & mono_internal_current_mask))) {
+	if (MONO_TRACE_IS_TRACED (level, mask)) {
 		va_list args;
 		va_start (args, format);
 		mono_tracev_inner (level, mask, format, args);
@@ -84,49 +89,10 @@ mono_trace (GLogLevelFlags level, MonoTraceMask mask, const char *format, ...)
 	}
 }
 
-#ifdef G_HAVE_ISO_VARARGS
-#define mono_trace_error(...)	mono_trace(G_LOG_LEVEL_ERROR, \
-											__VA_ARGS__)
-#define mono_trace_warning(...) mono_trace(G_LOG_LEVEL_WARNING, \
-											__VA_ARGS__)
-#define mono_trace_message(...) mono_trace(G_LOG_LEVEL_MESSAGE, \
-											__VA_ARGS__)
-#elif defined(G_HAVE_GNUC_VARARGS)
-#define mono_trace_error(format...)	mono_trace(G_LOG_LEVEL_ERROR, \
-											format)
-#define mono_trace_warning(format...) mono_trace(G_LOG_LEVEL_WARNING, \
-											format)
-#define mono_trace_message(format...) mono_trace(G_LOG_LEVEL_MESSAGE, \
-											format)
-#else /* no varargs macros */
-G_GNUC_UNUSED static void
-mono_trace_error(MonoTraceMask mask, const char *format, ...)
-{
-	va_list args;
-	va_start (args, format);
-	mono_tracev(G_LOG_LEVEL_ERROR, mask, format, args);
-	va_end (args);
-}
-
-G_GNUC_UNUSED static void
-mono_trace_warning(MonoTraceMask mask, const char *format, ...)
-{
-	va_list args;
-	va_start (args, format);
-	mono_tracev(G_LOG_LEVEL_WARNING, mask, format, args);
-	va_end (args);
-}
-
-G_GNUC_UNUSED static void
-mono_trace_message(MonoTraceMask mask, const char *format, ...)
-{
-	va_list args;
-	va_start (args, format);
-	mono_tracev(G_LOG_LEVEL_MESSAGE, mask, format, args);
-	va_end (args);
-}
-
-#endif /* !__GNUC__ */
+// __VA_ARGS__ is never empty, so a comma before it is always correct.
+#define mono_trace_error(...)	(mono_trace (G_LOG_LEVEL_ERROR, __VA_ARGS__))
+#define mono_trace_warning(...) (mono_trace (G_LOG_LEVEL_WARNING, __VA_ARGS__))
+#define mono_trace_message(...) (mono_trace (G_LOG_LEVEL_MESSAGE, __VA_ARGS__))
 
 #if defined (HOST_ANDROID) || (defined (TARGET_IOS) && defined (TARGET_IOS))
 
@@ -188,8 +154,14 @@ void mono_log_close_logcat (void);
 void mono_log_open_asl (const char *path, void *userData);
 void mono_log_write_asl (const char *log_domain, GLogLevelFlags level, mono_bool hdr, const char *message);
 void mono_log_close_asl (void);
-
 #endif
+
+void mono_log_open_recorder (const char *path, void *userData);
+void mono_log_write_recorder (const char *log_domain, GLogLevelFlags level, mono_bool hdr, const char *message);
+void mono_log_close_recorder (void);
+void mono_log_dump_recorder (void);
+
+void mono_dump_mem (gpointer d, int len);
 
 G_END_DECLS
 

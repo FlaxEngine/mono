@@ -148,6 +148,11 @@ namespace System {
             throw new InvalidOperationException(SR.InvalidOperation_EnumEnded);
         }
 
+        internal static void ThrowInvalidOperationException_InvalidOperation_NoValue()
+        {
+            throw new InvalidOperationException(SR.InvalidOperation_NoValue);
+        }
+
         private static ArgumentOutOfRangeException GetArgumentOutOfRangeException(ExceptionArgument argument, string resource)
         {
             return new ArgumentOutOfRangeException(GetArgumentName(argument), resource);
@@ -186,6 +191,48 @@ namespace System {
         internal static void ThrowKeyNotFoundException(object key)
         {
             throw GetKeyNotFoundException(key);
+        }
+
+        internal static void ThrowInvalidTypeWithPointersNotSupported(Type targetType)
+        {
+            throw new ArgumentException(SR.Format(SR.Argument_InvalidTypeWithPointersNotSupported, targetType));
+        }
+
+        internal static void ThrowInvalidOperationException_ConcurrentOperationsNotSupported()
+        {
+            throw GetInvalidOperationException("Operations that change non-concurrent collections must have exclusive access. A concurrent update was performed on this collection and corrupted its state. The collection's state is no longer correct.");
+        }
+
+        internal static InvalidOperationException GetInvalidOperationException(string str)
+        {
+            return new InvalidOperationException(str);
+        }
+
+        internal static void ThrowArraySegmentCtorValidationFailedExceptions(Array array, int offset, int count)
+        {
+            throw GetArraySegmentCtorValidationFailedException(array, offset, count);
+        }
+
+        private static Exception GetArraySegmentCtorValidationFailedException(Array array, int offset, int count)
+        {
+            if (array == null)
+                return GetArgumentNullException(ExceptionArgument.array);
+            if (offset < 0)
+                return GetArgumentOutOfRangeException(ExceptionArgument.offset, ExceptionResource.ArgumentOutOfRange_NeedNonNegNum);
+            if (count < 0)
+                return GetArgumentOutOfRangeException(ExceptionArgument.count, ExceptionResource.ArgumentOutOfRange_NeedNonNegNum);
+
+            return GetArgumentException(ExceptionResource.Argument_InvalidOffLen);
+        }
+
+        private static ArgumentException GetArgumentException(ExceptionResource resource)
+        {
+            return new ArgumentException(resource.ToString());
+        }
+
+        private static ArgumentNullException GetArgumentNullException(ExceptionArgument argument)
+        {
+            return new ArgumentNullException(GetArgumentName(argument));
         }
 #endif
 
@@ -305,6 +352,23 @@ namespace System {
             }
 
             return argumentName;
+        }
+
+        private static ArgumentOutOfRangeException GetArgumentOutOfRangeException(ExceptionArgument argument, ExceptionResource resource)
+        {
+            return new ArgumentOutOfRangeException(GetArgumentName(argument), resource.ToString());
+        }
+
+        internal static void ThrowStartIndexArgumentOutOfRange_ArgumentOutOfRange_Index()
+        {
+            throw GetArgumentOutOfRangeException(ExceptionArgument.startIndex,
+                                                 ExceptionResource.ArgumentOutOfRange_Index);
+        }
+
+        internal static void ThrowCountArgumentOutOfRange_ArgumentOutOfRange_Count()
+        {
+            throw GetArgumentOutOfRangeException(ExceptionArgument.count,
+                                                 ExceptionResource.ArgumentOutOfRange_Count);
         }
 
         //
@@ -545,7 +609,25 @@ namespace System {
         text,
         length,
         comparer,
-        comparable
+        comparable,
+        exceptions,
+        exception,
+        action,
+        comparison,
+        startSegment,
+        endSegment,
+        endIndex,
+        task,
+        source,
+        state,
+        culture,
+        destination,
+        byteOffset,
+        minimumBufferSize,
+        offset,
+        values,
+        comparisonType,
+        s
 #endif
     }
 
@@ -600,7 +682,12 @@ namespace System {
         ObjectDisposed_RegKeyClosed,
         NotSupported_InComparableType,
         Argument_InvalidRegistryOptionsCheck,
-        Argument_InvalidRegistryViewCheck
+        Argument_InvalidRegistryViewCheck,
+        TaskT_TransitionToFinal_AlreadyCompleted,
+        TaskCompletionSourceT_TrySetException_NullException,
+        TaskCompletionSourceT_TrySetException_NoExceptions,
+        NotSupported_StringComparison,
+        InvalidOperation_NullArray,
     }
 }
 

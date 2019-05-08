@@ -32,8 +32,6 @@ Add counters for:
 	mix/max/avg size of stack marks
 	handle stack wastage
 
-Actually do something in mono_handle_verify
-
 Shrink the handles stack in mono_handle_stack_scan
 Add a boehm implementation
 
@@ -96,7 +94,7 @@ free_handle_chunk (HandleChunk *chunk)
 	g_free (chunk);
 }
 
-const MonoObjectHandle mono_null_value_handle = NULL;
+const MonoObjectHandle mono_null_value_handle = { 0 };
 
 #define THIS_IS_AN_OK_NUMBER_OF_HANDLES 100
 
@@ -109,7 +107,11 @@ chunk_element (HandleChunk *chunk, int idx)
 static HandleChunkElem*
 handle_to_chunk_element (MonoObjectHandle o)
 {
+#if MONO_TYPE_SAFE_HANDLES
+	return (HandleChunkElem*)o.__raw;
+#else
 	return (HandleChunkElem*)o;
+#endif
 }
 
 /* Given a HandleChunkElem* search through the current handle stack to find its chunk and offset. */
@@ -196,7 +198,7 @@ mono_handle_new (MonoObject *obj, const char *owner)
 #endif
 {
 	MonoThreadInfo *info = mono_thread_info_current ();
-	HandleStack *handles = (HandleStack *)info->handle_stack;
+	HandleStack *handles = info->handle_stack;
 	HandleChunk *top = handles->top;
 #ifdef MONO_HANDLE_TRACK_SP
 	mono_handle_chunk_leak_check (handles);
@@ -242,7 +244,7 @@ retry:
 	goto retry;
 }
 
-MonoRawHandle
+gpointer
 #ifndef MONO_HANDLE_TRACK_OWNER
 mono_handle_new_interior (gpointer rawptr)
 #else
@@ -250,7 +252,7 @@ mono_handle_new_interior (gpointer rawptr, const char *owner)
 #endif
 {
 	MonoThreadInfo *info = mono_thread_info_current ();
-	HandleStack *handles = (HandleStack *)info->handle_stack;
+	HandleStack *handles = info->handle_stack;
 	HandleChunk *top = handles->interior;
 #ifdef MONO_HANDLE_TRACK_SP
 	mono_handle_chunk_leak_check (handles);
@@ -426,7 +428,7 @@ mono_handle_stack_scan (HandleStack *stack, GcScanFunc func, gpointer gc_data, g
 void
 mono_stack_mark_record_size (MonoThreadInfo *info, HandleStackMark *stackmark, const char *func_name)
 {
-	HandleStack *handles = (HandleStack *)info->handle_stack;
+	HandleStack *handles = info->handle_stack;
 	HandleChunk *cur = stackmark->chunk;
 	int size = -stackmark->size; //discard the starting point of the stack
 	while (cur) {
@@ -477,15 +479,6 @@ mono_array_new_full_handle (MonoDomain *domain, MonoClass *array_class, uintptr_
 	return MONO_HANDLE_NEW (MonoArray, mono_array_new_full_checked (domain, array_class, lengths, lower_bounds, error));
 }
 
-#ifdef ENABLE_CHECKED_BUILD
-/* Checked build helpers */
-void
-mono_handle_verify (MonoRawHandle raw_handle)
-{
-	
-}
-#endif
-
 uintptr_t
 mono_array_handle_length (MonoArrayHandle arr)
 {
@@ -500,7 +493,7 @@ mono_gchandle_from_handle (MonoObjectHandle handle, mono_bool pinned)
 	/* FIXME: chunk_element_to_chunk_idx does a linear search through the
 	 * chunks and we only need it for the assert */
 	MonoThreadInfo *info = mono_thread_info_current ();
-	HandleStack *stack = (HandleStack*) info->handle_stack;
+	HandleStack *stack = info->handle_stack;
 	HandleChunkElem* elem = handle_to_chunk_element (handle);
 	int elem_idx = 0;
 	HandleChunk *chunk = chunk_element_to_chunk_idx (stack, elem, &elem_idx);
@@ -538,7 +531,7 @@ mono_object_handle_pin_unbox (MonoObjectHandle obj, uint32_t *gchandle)
 {
 	g_assert (!MONO_HANDLE_IS_NULL (obj));
 	MonoClass *klass = mono_handle_class (obj);
-	g_assert (klass->valuetype);
+	g_assert (m_class_is_valuetype (klass));
 	*gchandle = mono_gchandle_from_handle (obj, TRUE);
 	return mono_object_unbox (MONO_HANDLE_RAW (obj));
 }
@@ -552,5 +545,11 @@ mono_array_handle_memcpy_refs (MonoArrayHandle dest, uintptr_t dest_idx, MonoArr
 gboolean
 mono_handle_stack_is_empty (HandleStack *stack)
 {
-	return (stack->top == stack->bottom && stack->top->size == 0);
+	return stack->top == stack->bottom && stack->top->size == 0;
+}
+
+void
+mono_gchandle_set_target_handle (guint32 gchandle, MonoObjectHandle obj)
+{
+	mono_gchandle_set_target (gchandle, MONO_HANDLE_RAW (obj));
 }

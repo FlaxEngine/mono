@@ -61,8 +61,8 @@ MonoCallSpec *mono_trace_set_options (const char *options)
 }
 
 static
-#ifdef HAVE_KW_THREAD
-__thread 
+#ifdef MONO_KEYWORD_THREAD
+MONO_KEYWORD_THREAD
 #endif
 int indent_level = 0;
 static guint64 start_time = 0;
@@ -143,13 +143,32 @@ mono_trace_enter_method (MonoMethod *method, char *ebp)
 	g_free (fname);
 
 	if (!ebp) {
+
+// https://github.com/mono/mono/issues/8572
+// Build fails on Redhat 6.8 with GCC 4.4.7.
+// Old gcc does not allow pragma diagnostic within function.
+#if __clang__ || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
+#define GCC_PRAGMA_DIAGNOSTIC_WITHIN_FUNCTION 1
+#endif
+
+#if GCC_PRAGMA_DIAGNOSTIC_WITHIN_FUNCTION
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
+#pragma GCC diagnostic ignored "-Wframe-address"
+#endif
+
 		printf (") ip: %p\n", MONO_RETURN_ADDRESS_N (1));
+
+#if GCC_PRAGMA_DIAGNOSTIC_WITHIN_FUNCTION
+#pragma GCC diagnostic pop
+#endif
+
 		goto unlock;
 	}
 
 	sig = mono_method_signature (method);
 
-	arg_info = (MonoJitArgumentInfo *)alloca (sizeof (MonoJitArgumentInfo) * (sig->param_count + 1));
+	arg_info = g_newa (MonoJitArgumentInfo, sig->param_count + 1);
 
 	if (method->is_inflated) {
 		/* FIXME: Might be better to pass the ji itself */
@@ -174,7 +193,7 @@ mono_trace_enter_method (MonoMethod *method, char *ebp)
 
 	if (mono_method_signature (method)->hasthis) {
 		gpointer *this_obj = (gpointer *)(ebp + arg_info [0].offset);
-		if (method->klass->valuetype) {
+		if (m_class_is_valuetype (method->klass)) {
 			printf ("value:%p, ", *arg_in_stack_slot(this_obj, gpointer *));
 		} else {
 			o = *arg_in_stack_slot(this_obj, MonoObject *);
@@ -189,7 +208,7 @@ mono_trace_enter_method (MonoMethod *method, char *ebp)
 					printf ("this:[STRING:%p:%s], ", o, as);
 					g_free (as);
 				} else {
-					printf ("this:%p[%s.%s %s], ", o, klass->name_space, klass->name, o->vtable->domain->friendly_name);
+					printf ("this:%p[%s.%s %s], ", o, m_class_get_name_space (klass), m_class_get_name (klass), o->vtable->domain->friendly_name);
 				}
 			} else 
 				printf ("this:NULL, ");
@@ -243,18 +262,19 @@ mono_trace_enter_method (MonoMethod *method, char *ebp)
 			o = *arg_in_stack_slot(cpos, MonoObject *);
 			if (o) {
 				klass = o->vtable->klass;
-		    
+
+				gpointer data = mono_object_get_data (o);
 				if (klass == mono_defaults.string_class) {
 					char *as = string_to_utf8 ((MonoString*)o);
 
 					printf ("[STRING:%p:%s], ", o, as);
 					g_free (as);
 				} else if (klass == mono_defaults.int32_class) {
-					printf ("[INT32:%p:%d], ", o, *(gint32 *)((char *)o + sizeof (MonoObject)));
+					printf ("[INT32:%p:%d], ", o, *(gint32 *)data);
 				} else if (klass == mono_defaults.runtimetype_class) {
 					printf ("[TYPE:%s], ", mono_type_full_name (((MonoReflectionType*)o)->type));
 				} else
-					printf ("[%s.%s:%p], ", klass->name_space, klass->name, o);
+					printf ("[%s.%s:%p], ", m_class_get_name_space (klass), m_class_get_name (klass), o);
 			} else {
 				printf ("%p, ", *arg_in_stack_slot(cpos, gpointer));
 			}
@@ -374,14 +394,15 @@ mono_trace_leave_method (MonoMethod *method, ...)
 		MonoObject *o = va_arg (ap, MonoObject *);
 
 		if (o) {
+			gpointer data = mono_object_get_data (o);
 			if (o->vtable->klass == mono_defaults.boolean_class) {
-				printf ("[BOOLEAN:%p:%d]", o, *((guint8 *)o + sizeof (MonoObject)));		
+				printf ("[BOOLEAN:%p:%d]", o, *(guint8 *)data);
 			} else if  (o->vtable->klass == mono_defaults.int32_class) {
-				printf ("[INT32:%p:%d]", o, *((gint32 *)((char *)o + sizeof (MonoObject))));	
+				printf ("[INT32:%p:%d]", o, *(gint32 *)data);
 			} else if  (o->vtable->klass == mono_defaults.int64_class) {
-				printf ("[INT64:%p:%lld]", o, (long long)*((gint64 *)((char *)o + sizeof (MonoObject))));	
+				printf ("[INT64:%p:%lld]", o, (long long)*(gint64 *)data);
 			} else
-				printf ("[%s.%s:%p]", o->vtable->klass->name_space, o->vtable->klass->name, o);
+				printf ("[%s.%s:%p]", m_class_get_name_space (mono_object_class (o)), m_class_get_name (mono_object_class (o)), o);
 		} else
 			printf ("[OBJECT:%p]", o);
 	       

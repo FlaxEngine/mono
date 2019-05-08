@@ -19,6 +19,18 @@
 #include "mono/metadata/debug-helpers.h"
 #include "mono/metadata/tabledefs.h"
 #include "mono/metadata/appdomain.h"
+#include "mono/metadata/abi-details.h"
+#ifdef MONO_CLASS_DEF_PRIVATE
+/* Rationale: we want the functions in this file to work even when everything
+ * is broken.  They may be called from a debugger session, for example.  If
+ * MonoClass getters include assertions or trigger class loading, we don't want
+ * that kicked off by a call to one of the functions in here.
+ */
+#define REALLY_INCLUDE_CLASS_DEF 1
+#include <mono/metadata/class-private-definition.h>
+#undef REALLY_INCLUDE_CLASS_DEF
+#endif
+
 
 struct MonoMethodDesc {
 	char *name_space;
@@ -42,13 +54,13 @@ static const struct msgstr_t {
 #undef WRAPPER
 };
 static const gint16 opidx [] = {
-#define WRAPPER(a,b) [MONO_WRAPPER_ ## a] = offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
+#define WRAPPER(a,b) offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
 #include "wrapper-types.h"
 #undef WRAPPER
 };
 
-static const char*
-wrapper_type_to_str (guint32 wrapper_type)
+const char*
+mono_wrapper_type_to_str (guint32 wrapper_type)
 {
 	g_assert (wrapper_type < MONO_WRAPPER_NUM);
 
@@ -63,8 +75,8 @@ wrapper_type_names [MONO_WRAPPER_NUM + 1] = {
 	NULL
 };
 
-static const char*
-wrapper_type_to_str (guint32 wrapper_type)
+const char*
+mono_wrapper_type_to_str (guint32 wrapper_type)
 {
 	g_assert (wrapper_type < MONO_WRAPPER_NUM);
 
@@ -163,14 +175,14 @@ mono_type_get_desc (GString *res, MonoType *type, gboolean include_namespace)
 		g_string_append_c (res, '*');
 		break;
 	case MONO_TYPE_ARRAY:
-		mono_type_get_desc (res, &type->data.array->eklass->byval_arg, include_namespace);
+		mono_type_get_desc (res, &type->data.array->eklass->_byval_arg, include_namespace);
 		g_string_append_c (res, '[');
 		for (i = 1; i < type->data.array->rank; ++i)
 			g_string_append_c (res, ',');
 		g_string_append_c (res, ']');
 		break;
 	case MONO_TYPE_SZARRAY:
-		mono_type_get_desc (res, &type->data.klass->byval_arg, include_namespace);
+		mono_type_get_desc (res, &type->data.klass->_byval_arg, include_namespace);
 		g_string_append (res, "[]");
 		break;
 	case MONO_TYPE_CLASS:
@@ -180,7 +192,7 @@ mono_type_get_desc (GString *res, MonoType *type, gboolean include_namespace)
 	case MONO_TYPE_GENERICINST: {
 		MonoGenericContext *context;
 
-		mono_type_get_desc (res, &type->data.generic_class->container_class->byval_arg, include_namespace);
+		mono_type_get_desc (res, &type->data.generic_class->container_class->_byval_arg, include_namespace);
 		g_string_append (res, "<");
 		context = &type->data.generic_class->context;
 		if (context->class_inst) {
@@ -275,49 +287,6 @@ mono_signature_full_name (MonoMethodSignature *sig)
 	res = g_string_new ("");
 
 	mono_type_get_desc (res, sig->ret, TRUE);
-	g_string_append_c (res, '(');
-	for (i = 0; i < sig->param_count; ++i) {
-		if (i > 0)
-			g_string_append_c (res, ',');
-		mono_type_get_desc (res, sig->params [i], TRUE);
-	}
-	g_string_append_c (res, ')');
-	result = res->str;
-	g_string_free (res, FALSE);
-	return result;
-}
-
-/*
- * Returns a string ready to be consumed by managed code when formating a string to include class + method name.
- * IE, say you have void Foo:Bar(int). It will return "void {0}(int)".
- * The reason for this is that managed exception constructors for missing members require a both class and member names to be provided independently of the signature.
- */
-char*
-mono_signature_get_managed_fmt_string (MonoMethodSignature *sig)
-{
-	int i;
-	char *result;
-	GString *res;
-
-	if (!sig)
-		return g_strdup ("<invalid signature>");
-
-	res = g_string_new ("");
-
-	mono_type_get_desc (res, sig->ret, TRUE);
-
-	g_string_append (res, " {0}");
-
-	if (sig->generic_param_count) {
-		g_string_append_c (res, '<');
-		for (i = 0; i < sig->generic_param_count; ++i) {
-			if (i > 0)
-				g_string_append (res, ",");
-			g_string_append_printf (res, "!%d", i);
-		}
-		g_string_append_c (res, '>');
-	}
-
 	g_string_append_c (res, '(');
 	for (i = 0; i < sig->param_count; ++i) {
 		if (i > 0)
@@ -586,6 +555,8 @@ mono_method_desc_is_full (MonoMethodDesc *desc)
 gboolean
 mono_method_desc_full_match (MonoMethodDesc *desc, MonoMethod *method)
 {
+	if (!desc)
+		return FALSE;
 	if (!desc->klass)
 		return FALSE;
 	if (!match_class (desc, strlen (desc->klass), method->klass))
@@ -912,9 +883,9 @@ mono_method_get_name_full (MonoMethod *method, gboolean signature, gboolean ret,
 	}
 
 	if (format == MONO_TYPE_NAME_FORMAT_IL)
-		klass_desc = mono_type_full_name (&method->klass->byval_arg);
+		klass_desc = mono_type_full_name (&method->klass->_byval_arg);
 	else
-		klass_desc = mono_type_get_name_full (&method->klass->byval_arg, format);
+		klass_desc = mono_type_get_name_full (&method->klass->_byval_arg, format);
 
 	if (method->is_inflated && ((MonoMethodInflated*)method)->context.method_inst) {
 		GString *str = g_string_new ("");
@@ -949,7 +920,7 @@ mono_method_get_name_full (MonoMethod *method, gboolean signature, gboolean ret,
 	}
 
 	if (method->wrapper_type != MONO_WRAPPER_NONE)
-		sprintf (wrapper, "(wrapper %s) ", wrapper_type_to_str (method->wrapper_type));
+		sprintf (wrapper, "(wrapper %s) ", mono_wrapper_type_to_str (method->wrapper_type));
 	else
 		strcpy (wrapper, "");
 
@@ -965,7 +936,7 @@ mono_method_get_name_full (MonoMethod *method, gboolean signature, gboolean ret,
 		}
 
 		if (method->wrapper_type != MONO_WRAPPER_NONE)
-			sprintf (wrapper, "(wrapper %s) ", wrapper_type_to_str (method->wrapper_type));
+			sprintf (wrapper, "(wrapper %s) ", mono_wrapper_type_to_str (method->wrapper_type));
 		else
 			strcpy (wrapper, "");
 		if (ret && sig) {
@@ -998,7 +969,11 @@ mono_method_get_name_full (MonoMethod *method, gboolean signature, gboolean ret,
 char *
 mono_method_full_name (MonoMethod *method, gboolean signature)
 {
-	return mono_method_get_name_full (method, signature, FALSE, MONO_TYPE_NAME_FORMAT_IL);
+	char *res;
+	MONO_ENTER_GC_UNSAFE;
+	res = mono_method_get_name_full (method, signature, FALSE, MONO_TYPE_NAME_FORMAT_IL);
+	MONO_EXIT_GC_UNSAFE;
+	return res;
 }
 
 char *
@@ -1162,12 +1137,12 @@ objval_describe (MonoClass *klass, const char *addr)
 	gssize type_offset = 0;
 
 	if (klass->valuetype)
-		type_offset = -sizeof (MonoObject);
+		type_offset = - MONO_ABI_SIZEOF (MonoObject);
 
 	for (p = klass; p != NULL; p = p->parent) {
 		gpointer iter = NULL;
 		int printed_header = FALSE;
-		while ((field = mono_class_get_fields (p, &iter))) {
+		while ((field = mono_class_get_fields_internal (p, &iter))) {
 			if (field->type->attrs & (FIELD_ATTRIBUTE_STATIC | FIELD_ATTRIBUTE_HAS_FIELD_RVA))
 				continue;
 
@@ -1238,7 +1213,7 @@ mono_class_describe_statics (MonoClass* klass)
 
 	for (p = klass; p != NULL; p = p->parent) {
 		gpointer iter = NULL;
-		while ((field = mono_class_get_fields (p, &iter))) {
+		while ((field = mono_class_get_fields_internal (p, &iter))) {
 			if (field->type->attrs & FIELD_ATTRIBUTE_LITERAL)
 				continue;
 			if (!(field->type->attrs & (FIELD_ATTRIBUTE_STATIC | FIELD_ATTRIBUTE_HAS_FIELD_RVA)))

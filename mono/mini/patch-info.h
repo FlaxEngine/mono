@@ -56,7 +56,6 @@ PATCH_INFO(GC_NURSERY_BITS, "gc_nursery_bits")
 PATCH_INFO(GSHAREDVT_IN_WRAPPER, "gsharedvt_in_wrapper")
 PATCH_INFO(ICALL_ADDR_CALL, "icall_addr_call")
 PATCH_INFO(GET_TLS_TRAMP, "get_tls_tramp")
-PATCH_INFO(JIT_THREAD_ATTACH, "jit_thread_attach")
 PATCH_INFO(SET_TLS_TRAMP, "set_tls_tramp")
 /*
  * The address of a C function implementing a JIT icall.
@@ -64,3 +63,4 @@ PATCH_INFO(SET_TLS_TRAMP, "set_tls_tramp")
  */
 PATCH_INFO(JIT_ICALL_ADDR_NOCALL, "jit_icall_addr_nocall")
 PATCH_INFO(PROFILER_ALLOCATION_COUNT, "profiler_allocation_count")
+PATCH_INFO(PROFILER_CLAUSE_COUNT, "profiler_clause_count")

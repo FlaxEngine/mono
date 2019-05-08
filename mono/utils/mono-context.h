@@ -41,7 +41,7 @@ typedef __m128d MonoContextSimdReg;
 #elif defined(HOST_ANDROID)
 #define MONO_HAVE_SIMD_REG
 typedef struct _libc_xmmreg MonoContextSimdReg;
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__OpenBSD__)
 #define MONO_HAVE_SIMD_REG
 #include <emmintrin.h>
 typedef __m128d MonoContextSimdReg;
@@ -290,7 +290,8 @@ typedef struct {
 
 #if defined (HOST_WIN32) && !defined(__GNUC__)
 /* msvc doesn't support inline assembly, so have to use a separate .asm file */
-extern void mono_context_get_current (void *);
+// G_EXTERN_C due to being written in assembly.
+G_EXTERN_C void mono_context_get_current (void *);
 #define MONO_CONTEXT_GET_CURRENT(ctx) do { mono_context_get_current((void*)&(ctx)); } while (0)
 
 #else
@@ -415,7 +416,7 @@ typedef struct {
 
 #define MONO_CONTEXT_GET_CURRENT(ctx) do { \
 	gpointer _dummy; \
-    ctx.regs [ARMREG_SP] = &_dummy; \
+    ctx.regs [ARMREG_SP] = (mgreg_t)&_dummy; \
 } while (0);
 
 #else
@@ -487,6 +488,13 @@ typedef struct {
 	g_assert (ret == 0);	\
 	mono_mach_arch_thread_states_to_mono_context ((thread_state_t) &thread_state, (thread_state_t) &thread_fpstate, &ctx); \
 	mach_port_deallocate (current_task (), self);	\
+} while (0);
+
+#elif defined(HOST_WATCHOS)
+
+#define MONO_CONTEXT_GET_CURRENT(ctx) do { \
+	gpointer _dummy; \
+	ctx.regs [ARMREG_SP] = (mgreg_t)(gsize)&_dummy; \
 } while (0);
 
 #else
@@ -865,7 +873,13 @@ typedef struct {
 
 #define MONO_ARCH_HAS_MONO_CONTEXT 1
 
+#include <sys/ucontext.h>
+
+#if __GLIBC_PREREQ(2, 27)
+typedef ucontext_t MonoContext;
+#else
 typedef struct ucontext MonoContext;
+#endif
 
 #define MONO_CONTEXT_SET_IP(ctx,ip) 					\
 	do {								\

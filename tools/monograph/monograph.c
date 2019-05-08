@@ -10,7 +10,10 @@
 #include "mono/metadata/mono-endian.h"
 #include "mono/metadata/appdomain.h" /* mono_init */
 #include "mono/metadata/debug-helpers.h"
+#include "mono/utils/checked-build.h"
 #include "mono/utils/mono-compiler.h"
+#include "mono/utils/mono-counters.h"
+#include "mono/utils/mono-threads.h"
 
 static FILE *output;
 static int include_namespace = 0;
@@ -26,13 +29,13 @@ void __nacl_suspend_thread_if_needed() {}
 static void
 output_type_edge (MonoClass *first, MonoClass *second) {
 	if (include_namespace)
-		fprintf (output, "\t\"%s.%s\" -> \"%s.%s\"\n", first->name_space, first->name, second->name_space, second->name);
+		fprintf (output, "\t\"%s.%s\" -> \"%s.%s\"\n", mono_class_get_namespace (first), mono_class_get_name (first), mono_class_get_namespace (second), mono_class_get_name (second));
 	else
-		fprintf (output, "\t\"%s\" -> \"%s\"\n", first->name, second->name);
+		fprintf (output, "\t\"%s\" -> \"%s\"\n", mono_class_get_name (first), mono_class_get_name (second));
 }
 
 static void
-print_subtypes (MonoImage *image, MonoClass *class, int depth) {
+print_subtypes (MonoImage *image, MonoClass *klass, int depth) {
 	int i, token;
 	const MonoTableInfo *t;
 	MonoClass *child;
@@ -42,7 +45,7 @@ print_subtypes (MonoImage *image, MonoClass *class, int depth) {
 
 	t = mono_image_get_table_info (image, MONO_TABLE_TYPEDEF);
 	
-	token = mono_metadata_token_index (class->type_token);
+	token = mono_metadata_token_index (mono_class_get_type_token (klass));
 	token <<= MONO_TYPEDEFORREF_BITS;
 	token |= MONO_TYPEDEFORREF_TYPEDEF;
 
@@ -50,22 +53,22 @@ print_subtypes (MonoImage *image, MonoClass *class, int depth) {
 	for (i = 0; i < mono_table_info_get_rows (t); ++i) {
 		if (token == mono_metadata_decode_row_col (t, i, MONO_TYPEDEF_EXTENDS)) {
 			child = mono_class_get (image, MONO_TOKEN_TYPE_DEF | (i + 1));
-			output_type_edge (class, child);
+			output_type_edge (klass, child);
 			print_subtypes (image, child, depth);
 		}
 	}
 }
 
 static void
-type_graph (MonoImage *image, const char* cname) {
-	MonoClass *class;
+type_graph (MonoImage *image, const char* const_cname) {
+	MonoClass *klass;
 	MonoClass *parent;
 	MonoClass *child;
 	const char *name_space;
 	char *p;
 	int depth = 0;
 
-	cname = g_strdup (cname);
+	char *cname = g_strdup (const_cname);
 	p = strrchr (cname, '.');
 	if (p) {
 		name_space = cname;
@@ -74,26 +77,26 @@ type_graph (MonoImage *image, const char* cname) {
 	} else {
 		name_space = "";
 	}
-	class = mono_class_from_name (image, name_space, cname);
-	if (!class) {
+	klass = mono_class_from_name (image, name_space, cname);
+	if (!klass) {
 		g_print ("class %s.%s not found\n", name_space, cname);
 		exit (1);
 	}
 	fprintf (output, "digraph blah {\n");
 	fprintf (output, "%s", graph_properties);
-	child = class;
+	child = klass;
 	/* go back and print the parents for the node as well: not sure it's a good idea */
-	for (parent = class->parent; parent; parent = parent->parent) {
+	for (parent = mono_class_get_parent (klass); parent; parent = mono_class_get_parent (parent)) {
 		output_type_edge (parent, child);
 		child = parent;
 	}
-	print_subtypes (image, class, depth);
+	print_subtypes (image, klass, depth);
 	fprintf (output, "}\n");
 }
 
 static void
-interface_graph (MonoImage *image, const char* cname) {
-	MonoClass *class;
+interface_graph (MonoImage *image, const char* const_cname) {
+	MonoClass *klass;
 	MonoClass *child;
 	const char *name_space;
 	char *p;
@@ -101,7 +104,7 @@ interface_graph (MonoImage *image, const char* cname) {
 	guint32 token, i, count = 0;
 	const MonoTableInfo *intf = mono_image_get_table_info (image, MONO_TABLE_INTERFACEIMPL);
 
-	cname = g_strdup (cname);
+	char *cname = g_strdup (const_cname);
 	p = strrchr (cname, '.');
 	if (p) {
 		name_space = cname;
@@ -110,8 +113,8 @@ interface_graph (MonoImage *image, const char* cname) {
 	} else {
 		name_space = "";
 	}
-	class = mono_class_from_name (image, name_space, cname);
-	if (!class) {
+	klass = mono_class_from_name (image, name_space, cname);
+	if (!klass) {
 		g_print ("interface %s.%s not found\n", name_space, cname);
 		exit (1);
 	}
@@ -119,7 +122,7 @@ interface_graph (MonoImage *image, const char* cname) {
 	fprintf (output, "digraph interface {\n");
 	fprintf (output, "%s", graph_properties);
 	/* TODO: handle inetrface defined in one image and class defined in another. */
-	token = mono_metadata_token_index (class->type_token);
+	token = mono_metadata_token_index (mono_class_get_type_token (klass));
 	token <<= MONO_TYPEDEFORREF_BITS;
 	token |= MONO_TYPEDEFORREF_TYPEDEF;
 	for (i = 0; i < mono_table_info_get_rows (intf); ++i) {
@@ -127,13 +130,13 @@ interface_graph (MonoImage *image, const char* cname) {
 		/*g_print ("index: %d [%d implements %d]\n", index, cols [MONO_INTERFACEIMPL_CLASS], cols [MONO_INTERFACEIMPL_INTERFACE]);*/
 		if (token == cols [MONO_INTERFACEIMPL_INTERFACE]) {
 			child = mono_class_get (image, MONO_TOKEN_TYPE_DEF | cols [MONO_INTERFACEIMPL_CLASS]);
-			output_type_edge (class, child);
+			output_type_edge (klass, child);
 			count++;
 		}
 	}
 	fprintf (output, "}\n");
 	if (verbose && !count)
-		g_print ("No class implements %s.%s\n", class->name_space, class->name);
+		g_print ("No class implements %s.%s\n", mono_class_get_namespace (klass), mono_class_get_name (klass));
 
 }
 
@@ -259,7 +262,7 @@ method_stats (MonoMethod *method) {
 		case MonoInlineType:
 			if (i == MONO_CEE_CASTCLASS || i == MONO_CEE_ISINST) {
 				guint32 token = read32 (ip + 1);
-				MonoClass *k = mono_class_get (method->klass->image, token);
+				MonoClass *k = mono_class_get (mono_class_get_image (method->klass), token);
 				if (k && mono_class_get_flags (k) & TYPE_ATTRIBUTE_SEALED)
 					cast_sealed++;
 				if (k && mono_class_get_flags (k) & TYPE_ATTRIBUTE_INTERFACE)
@@ -361,7 +364,7 @@ method_stats (MonoMethod *method) {
 			break;
 		case MonoInlineMethod:
 			if (i == MONO_CEE_CALLVIRT) {
-				MonoMethod *cm = mono_get_method (method->klass->image, read32 (ip + 1), NULL);
+				MonoMethod *cm = mono_get_method (mono_class_get_image (method->klass), read32 (ip + 1), NULL);
 				if (cm && !(cm->flags & METHOD_ATTRIBUTE_VIRTUAL))
 					nonvirt_callvirt++;
 				if (cm && (mono_class_get_flags (cm->klass) & TYPE_ATTRIBUTE_INTERFACE))
@@ -434,10 +437,10 @@ type_stats (MonoClass *klass) {
 		num_ifaces++;
 		return;
 	}
-	parent = klass->parent;
+	parent = mono_class_get_parent (klass);
 	while (parent) {
 		depth++;
-		parent = parent->parent;
+		parent = mono_class_get_parent (parent);
 	}
 	if (pdepth_array_next >= pdepth_array_size) {
 		pdepth_array_size *= 2;
@@ -527,7 +530,7 @@ type_size_stats (MonoClass *klass)
 		mono_method_header_get_code (header, &size, &maxs);
 		code_size += size;
 	}
-	g_print ("%s.%s: code: %d\n", klass->name_space, klass->name, code_size);
+	g_print ("%s.%s: code: %d\n", mono_class_get_namespace (klass), mono_class_get_name (klass), code_size);
 }
 
 static void
@@ -551,14 +554,14 @@ get_signature (MonoMethod *method) {
 
 	if (!hash)
 		hash = g_hash_table_new (g_direct_hash, g_direct_equal);
-	if ((result = g_hash_table_lookup (hash, method)))
+	if ((result = (char*)g_hash_table_lookup (hash, method)))
 		return result;
 
 	res = g_string_new ("");
-	if (include_namespace && *(method->klass->name_space))
-		g_string_append_printf (res, "%s.", method->klass->name_space);
+	if (include_namespace && *mono_class_get_namespace (method->klass))
+		g_string_append_printf (res, "%s.", mono_class_get_namespace (method->klass));
 	result = mono_signature_get_desc (mono_method_signature (method), include_namespace);
-	g_string_append_printf (res, "%s:%s(%s)", method->klass->name, method->name, result);
+	g_string_append_printf (res, "%s:%s(%s)", mono_class_get_name (method->klass), method->name, result);
 	g_free (result);
 	g_hash_table_insert (hash, method, res->str);
 
@@ -666,7 +669,7 @@ print_method (MonoMethod *method, int depth) {
 			ip++;
 			token = read32 (ip);
 			ip += 4;
-			called = mono_get_method (method->klass->image, token, NULL);
+			called = mono_get_method (mono_class_get_image (method->klass), token, NULL);
 			if (!called)
 				break; /* warn? */
 			if (g_hash_table_lookup (hash, called))
@@ -740,8 +743,8 @@ link_bblock (MonoBasicBlock *from, MonoBasicBlock* to)
 static int
 compare_bblock (const void *a, const void *b)
 {
-	MonoBasicBlock * const *ab = a;
-	MonoBasicBlock * const *bb = b;
+	MonoBasicBlock * const *ab = (MonoBasicBlock * const *)a;
+	MonoBasicBlock * const *bb = (MonoBasicBlock * const *)b;
 
 	return (*ab)->cil_code - (*bb)->cil_code;
 }
@@ -749,7 +752,7 @@ compare_bblock (const void *a, const void *b)
 static GPtrArray*
 mono_method_find_bblocks (MonoMethodHeader *header)
 {
-	const unsigned char *ip, *end, *start;
+	const unsigned char *ip, *end;
 	const MonoOpcode *opcode;
 	guint32 i, block_end = 0;
 	GPtrArray *result = g_ptr_array_new ();
@@ -774,8 +777,7 @@ mono_method_find_bblocks (MonoMethodHeader *header)
 
 	/* handle exception code blocks... */
 	while (ip < end) {
-		start = ip;
-		if ((target = g_hash_table_lookup (table, ip)) && target != bb) {
+		if ((target = (MonoBasicBlock*)g_hash_table_lookup (table, ip)) && target != bb) {
 			if (!block_end)
 				link_bblock (bb, target);
 			bb = target;
@@ -783,7 +785,7 @@ mono_method_find_bblocks (MonoMethodHeader *header)
 		}
 		if (block_end) {
 			/*fprintf (stderr, "processing bbclok at IL_%04x\n", ip - header->code);*/
-			if (!(bb = g_hash_table_lookup (table, ip))) {
+			if (!(bb = (MonoBasicBlock*)g_hash_table_lookup (table, ip))) {
 				bb = g_new0 (MonoBasicBlock, 1);
 				bb->cil_code = ip;
 				g_ptr_array_add (result, bb);
@@ -846,7 +848,7 @@ mono_method_find_bblocks (MonoMethodHeader *header)
 				ip += 4;
 			}
 			if (opcode->flow_type == MONO_FLOW_COND_BRANCH) {
-				if (!(target = g_hash_table_lookup (table, ip))) {
+				if (!(target = (MonoBasicBlock*)g_hash_table_lookup (table, ip))) {
 					target = g_new0 (MonoBasicBlock, 1);
 					target->cil_code = ip;
 					g_ptr_array_add (result, target);
@@ -854,7 +856,7 @@ mono_method_find_bblocks (MonoMethodHeader *header)
 				}
 				link_bblock (bb, target);
 			}
-			if (!(target = g_hash_table_lookup (table, ip + i))) {
+			if (!(target = (MonoBasicBlock*)g_hash_table_lookup (table, ip + i))) {
 				target = g_new0 (MonoBasicBlock, 1);
 				target->cil_code = ip + i;
 				g_ptr_array_add (result, target);
@@ -874,7 +876,7 @@ mono_method_find_bblocks (MonoMethodHeader *header)
 			for (i = 0; i < n; i++) {
 				itarget = st + read32 (ip);
 				ip += 4;
-				if (!(target = g_hash_table_lookup (table, itarget))) {
+				if (!(target = (MonoBasicBlock*)g_hash_table_lookup (table, itarget))) {
 					target = g_new0 (MonoBasicBlock, 1);
 					target->cil_code = (const guchar*)itarget;
 					g_ptr_array_add (result, target);
@@ -937,7 +939,7 @@ df_visit (MonoBasicBlock *bb, int *dfn, const unsigned char* code)
 	++(*dfn);
 	bb->dfn = *dfn;
 	for (tmp = bb->out_bb; tmp; tmp = tmp->next) {
-		next = tmp->data;
+		next = (MonoBasicBlock*)tmp->data;
 		if (!next->dfn) {
 			if (!bb->cil_code)
 				fprintf (output, "\t\"DF entry\" -> \"IL_%04x (%d)\"\n", (unsigned int)(next->cil_code - code), *dfn + 1);
@@ -976,7 +978,7 @@ print_method_cfg (MonoMethod *method) {
 	for (i = 0; i < bblocks->len; ++i) {
 		bb = (MonoBasicBlock*)g_ptr_array_index (bblocks, i);
 		for (tmp = bb->out_bb; tmp; tmp = tmp->next) {
-			target = tmp->data;
+			target = (MonoBasicBlock*)tmp->data;
 			fprintf (output, "\tB%p -> B%p\n", bb, target);
 		}
 	}
@@ -1069,6 +1071,11 @@ enum {
 	GRAPH_STATS
 };
 
+static void
+thread_state_init (MonoThreadUnwindState *ctx)
+{
+}
+
 /*
  * TODO:
  * * virtual method calls as explained above
@@ -1093,6 +1100,7 @@ main (int argc, char *argv[]) {
 	int graphtype = GRAPH_TYPES;
 	int callneato = 0;
 	int i;
+	MonoThreadInfoRuntimeCallbacks ticallbacks;
 	
 	output = stdout;
 
@@ -1132,6 +1140,12 @@ main (int argc, char *argv[]) {
 		aname = argv [i];
 	if (argc > i + 1)
 		cname = argv [i + 1];
+	CHECKED_MONO_INIT ();
+	mono_counters_init ();
+	mono_tls_init_runtime_keys ();
+	memset (&ticallbacks, 0, sizeof (ticallbacks));
+	ticallbacks.thread_state_init = thread_state_init;
+	mono_thread_info_runtime_init (&ticallbacks);
 	if (aname) {
 		mono_init_from_assembly (argv [0], aname);
 		assembly = mono_assembly_open (aname, NULL);

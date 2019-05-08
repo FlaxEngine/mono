@@ -1,3 +1,5 @@
+include $(top_srcdir)/mk/common.mk
+
 if HOST_WIN32
 win32_sources = \
 	console-win32.c \
@@ -17,7 +19,8 @@ win32_sources = \
 	w32process-win32.c \
 	w32process-win32-internals.h \
 	w32socket-win32.c \
-	w32error-win32.c
+	w32error-win32.c \
+	w32subset.h
 
 platform_sources = $(win32_sources)
 
@@ -59,9 +62,7 @@ unix_sources = \
 platform_sources = $(unix_sources)
 endif
 
-if HOST_ANDROID
-platform_sources += ../../support/libm/complex.c
-endif
+glib_libs = $(top_builddir)/mono/eglib/libeglib.la
 
 if HOST_WASM
 platform_sources += threadpool-worker-wasm.c
@@ -89,7 +90,45 @@ if !ENABLE_ILGEN
 ilgen_libraries = libmono-ilgen.la
 endif
 
-noinst_LTLIBRARIES = libmonoruntime-config.la $(boehm_libraries) $(sgen_libraries)
+support_sources=empty.c
+
+if ENABLE_MONOTOUCH
+support_sources += ../../support/zlib-helper.c
+else
+if ENABLE_MONODROID
+support_sources += \
+	../../support/nl.c \
+	../../support/zlib-helper.c
+if HAVE_ZLIB
+# See libmonoruntime_support_la_LDFLAGS
+else
+support_sources += \
+	../../support/adler32.c \
+	../../support/compress.c \
+	../../support/crc32.c \
+	../../support/crc32.h \
+	../../support/deflate.c \
+	../../support/deflate.h \
+	../../support/infback.c \
+	../../support/inffast.c \
+	../../support/inffast.h \
+	../../support/inffixed.h \
+	../../support/inflate.c \
+	../../support/inflate.h \
+	../../support/inftrees.c \
+	../../support/inftrees.h \
+	../../support/trees.c \
+	../../support/trees.h \
+	../../support/uncompr.c \
+	../../support/zconf.h \
+	../../support/zlib.h \
+	../../support/zutil.c \
+	../../support/zutil.h
+endif
+endif
+endif
+
+noinst_LTLIBRARIES = libmonoruntime-config.la libmonoruntime-support.la $(boehm_libraries) $(sgen_libraries)
 
 lib_LTLIBRARIES = $(icall_table_libraries) $(ilgen_libraries)
 
@@ -111,7 +150,17 @@ mono-config-dirs.lo: Makefile
 libmonoruntime_config_la_SOURCES = \
 	mono-config-dirs.h		\
 	mono-config-dirs.c
-libmonoruntime_config_la_CPPFLAGS = $(AM_CPPFLAGS) -DMONO_BINDIR=\"$(bindir)/\" -DMONO_ASSEMBLIES=\"$(assembliesdir)\" -DMONO_CFG_DIR=\"$(confdir)\" -DMONO_RELOC_LIBDIR=\"../$(reloc_libdir)\"
+libmonoruntime_config_la_CPPFLAGS = $(AM_CPPFLAGS) -DMONO_BINDIR=\"$(bindir)/\" -DMONO_ASSEMBLIES=\"$(assembliesdir)\" -DMONO_CFG_DIR=\"$(confdir)\" -DMONO_RELOC_LIBDIR=\"../$(reloc_libdir)\" @CXX_ADD_CFLAGS@
+
+#
+# This library is only used to compile the required support/ sources. We can't use them directly in platform_sources
+# because they aren't C++ compatible.
+#
+libmonoruntime_support_la_SOURCES = $(support_sources)
+libmonoruntime_support_la_CFLAGS = $(filter-out @CXX_REMOVE_CFLAGS@, @CFLAGS@)
+if HAVE_ZLIB
+libmonoruntime_support_la_LDFLAGS = -lz
+endif
 
 #
 # This library contains the icall tables if the runtime was configured with --disable-icall-tables
@@ -119,10 +168,11 @@ libmonoruntime_config_la_CPPFLAGS = $(AM_CPPFLAGS) -DMONO_BINDIR=\"$(bindir)/\" 
 if DISABLE_ICALL_TABLES
 libmono_icall_table_la_SOURCES = \
 	icall-table.c
-libmono_icall_table_la_CFLAGS = $(SGEN_DEFINES)
+# Add CXX_ADD_CFLAGS per-library until/unless https://github.com/dotnet/corefx/pull/31342.
+libmono_icall_table_la_CFLAGS = $(SGEN_DEFINES) @CXX_ADD_CFLAGS@
 libmono_icall_table_la_LDFLAGS = $(libmonoldflags)
 if BITCODE
-libmono_icall_table_la_LIBADD = ../eglib/libeglib.la ../utils/libmonoutils.la ../sgen/libmonosgen.la libmonoruntimesgen.la
+libmono_icall_table_la_LIBADD = $(glib_libs) ../utils/libmonoutils.la ../sgen/libmonosgen.la libmonoruntimesgen.la
 endif
 endif
 
@@ -138,12 +188,14 @@ libmono_ilgen_la_SOURCES = \
 	marshal-ilgen.h	\
 	sgen-mono-ilgen.c \
 	sgen-mono-ilgen.h
-libmono_ilgen_la_CFLAGS = $(SGEN_DEFINES)
+# Add CXX_ADD_CFLAGS per-library until/unless https://github.com/dotnet/corefx/pull/31342.
+libmono_ilgen_la_CFLAGS = $(SGEN_DEFINES) @CXX_ADD_CFLAGS@
 libmono_ilgen_la_LDFLAGS = $(libmonoldflags)
 if BITCODE
-libmono_ilgen_la_LIBADD = ../eglib/libeglib.la ../utils/libmonoutils.la ../sgen/libmonosgen.la libmonoruntimesgen.la
+libmono_ilgen_la_LIBADD = $(glib_libs) ../utils/libmonoutils.la ../sgen/libmonosgen.la libmonoruntimesgen.la
 endif
 endif
+
 
 CLEANFILES = mono-bundle.stamp
 
@@ -182,8 +234,12 @@ common_sources = \
 	attach.c		\
 	cil-coff.h		\
 	class.c			\
+	class-getters.h		\
+	class-init.h		\
+	class-init.c		\
 	class-internals.h	\
 	class-inlines.h		\
+	class-private-definition.h	\
 	class-accessors.c	\
 	cominterop.c		\
 	cominterop.h		\
@@ -198,11 +254,10 @@ common_sources = \
 	debug-mono-symfile.c	\
 	debug-mono-ppdb.h	\
 	debug-mono-ppdb.c	\
-	decimal-ms.c		\
-	decimal-ms.h		\
 	domain-internals.h	\
 	environment.c		\
 	environment.h		\
+	environment-internal.h	\
 	exception.c		\
 	exception.h		\
 	exception-internals.h	\
@@ -213,6 +268,7 @@ common_sources = \
 	filewatcher.h		\
 	gc-internals.h		\
 	icall.c			\
+	icalls.h		\
 	icall-internals.h \
 	icall-def.h		\
 	icall-table.h	\
@@ -220,6 +276,7 @@ common_sources = \
 	image-internals.h	\
 	jit-info.c		\
 	loader.c		\
+	loader-internals.h	\
 	locales.c		\
 	locales.h		\
 	lock-tracer.c		\
@@ -259,8 +316,7 @@ common_sources = \
 	monitor.h		\
 	normalization-tables.h	\
 	number-formatter.h	\
-	number-ms.c		\
-	number-ms.h		\
+	number-ms.h             \
 	object.c	\
 	object-forward.h	\
 	object-internals.h	\
@@ -288,7 +344,6 @@ common_sources = \
 	security-manager.h	\
 	string-icalls.c 	\
 	string-icalls.h 	\
-	sysmath.h		\
 	sysmath.c		\
 	tabledefs.h 		\
 	threads.c		\
@@ -313,10 +368,12 @@ common_sources = \
 	file-mmap.h	\
 	object-offsets.h	\
 	abi-details.h	\
+	class-abi-details.h	\
 	metadata-cross-helpers.c	\
 	seq-points-data.h	\
 	seq-points-data.c	\
 	handle.c	\
+	handle-decl.h	\
 	handle.h	\
 	w32mutex.h	\
 	w32semaphore.h	\
@@ -335,7 +392,8 @@ common_sources = \
 	fdhandle.h	\
 	fdhandle.c	\
 	callspec.h	\
-	callspec.c
+	callspec.c	\
+	abi.c
 
 # These source files have compile time dependencies on GC code
 gc_dependent_sources = \
@@ -360,17 +418,26 @@ sgen_sources = \
 	sgen-mono.h		\
 	sgen-client-mono.h
 
+# Per-library to workaround CoreFX/native until/unless https://github.com/dotnet/corefx/pull/31342.
+#CFLAGS := $(filter-out @CXX_REMOVE_CFLAGS@, @CFLAGS@) @CXX_ADD_CFLAGS@
+CFLAGS := $(filter-out @CXX_REMOVE_CFLAGS@, @CFLAGS@)
+
 libmonoruntime_la_SOURCES = $(common_sources) $(icall_tables_sources) $(ilgen_sources) $(gc_dependent_sources) $(null_gc_sources) $(boehm_sources)
-libmonoruntime_la_CFLAGS = $(BOEHM_DEFINES)
-libmonoruntime_la_LIBADD = libmonoruntime-config.la
+# Add CXX_ADD_CFLAGS per-library until/unless https://github.com/dotnet/corefx/pull/31342.
+libmonoruntime_la_CFLAGS = $(BOEHM_DEFINES) @CXX_ADD_CFLAGS@
+libmonoruntime_la_LIBADD = libmonoruntime-config.la libmonoruntime-support.la
 
 libmonoruntimesgen_la_SOURCES = $(common_sources) $(icall_tables_sources) $(ilgen_sources) $(gc_dependent_sources) $(sgen_sources)
-libmonoruntimesgen_la_CFLAGS = $(SGEN_DEFINES)
-libmonoruntimesgen_la_LIBADD = libmonoruntime-config.la
+# Add CXX_ADD_CFLAGS per-library until/unless https://github.com/dotnet/corefx/pull/31342.
+libmonoruntimesgen_la_CFLAGS = $(SGEN_DEFINES) @CXX_ADD_CFLAGS@
+libmonoruntimesgen_la_LIBADD = libmonoruntime-config.la libmonoruntime-support.la
 
 libmonoruntimeincludedir = $(includedir)/mono-$(API_VER)/mono/metadata
 
 # This list is sorted for easier searching.
+# These are public headers.
+# They may not use G_BEGIN_DECLS, guint, glib.h, etc.
+# debug-mono-symfile.h is an exception. It is only semi-public.
 libmonoruntimeinclude_HEADERS = \
 	appdomain.h		\
 	assembly.h		\
@@ -388,6 +455,7 @@ libmonoruntimeinclude_HEADERS = \
 	mono-debug.h		\
 	mono-gc.h		\
 	object.h		\
+	object-forward.h	\
 	opcodes.h		\
 	profiler.h		\
 	profiler-events.h	\

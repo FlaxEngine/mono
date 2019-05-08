@@ -2,128 +2,187 @@
 LLVM_SRC?=$(TOP)/sdks/builds/toolchains/llvm
 
 $(TOP)/sdks/builds/toolchains/llvm:
-	git clone -b master https://github.com/mono/llvm.git $@
-	cd $@ && git checkout $(LLVM_HASH)
+	mkdir -p $(dir $@)
+	$(MAKE) -C $(TOP)/llvm -f build.mk $@/CMakeLists.txt \
+		LLVM_PATH="$@"
 
-$(LLVM_SRC)/configure: | $(LLVM_SRC)
+LLVM36_SRC?=$(TOP)/sdks/builds/toolchains/llvm36
+
+$(TOP)/sdks/builds/toolchains/llvm36:
+	mkdir -p $(dir $@)
+	git clone -b $(LLVM36_BRANCH) https://github.com/mono/llvm.git $@
+	cd $@ && git checkout $(LLVM36_HASH)
+
+$(LLVM36_SRC)/configure: | $(LLVM36_SRC)
+
+##
+# Parameters
+#  $(1): version
+#  $(2): target
+#  $(3): src
+define LLVMProvisionTemplate
+_$(1)-$(2)_HASH = $$(shell git -C $(3) rev-parse HEAD)
+_$(1)-$(2)_PACKAGE = $(1)-$(2)-$$(_$(1)-$(2)_HASH)-$$(UNAME).tar.gz
+_$(1)-$(2)_URL = "http://xamjenkinsartifact.blob.core.windows.net/mono-sdks/$$(_$(1)-$(2)_PACKAGE)"
+
+$$(TOP)/sdks/out/$(1)-$(2)/.stamp-download:
+	curl --location --silent --show-error $$(_$(1)-$(2)_URL) | tar -xvzf - -C $$(dir $$@)
+	touch $$@
+
+.PHONY: download-$(1)-$(2)
+download-$(1)-$(2): | $(3) setup-$(1)-$(2)
+	-$$(MAKE) $$(TOP)/sdks/out/$(1)-$(2)/.stamp-download
+
+.PHONY: provision-$(1)-$(2)
+provision-$(1)-$(2): | $(3) download-$(1)-$(2)
+	$$(if $$(wildcard $$(TOP)/sdks/out/$(1)-$(2)/.stamp-download),,$$(MAKE) package-$(1)-$(2))
+
+.PHONY: archive-$(1)-$(2)
+archive-$(1)-$(2): package-$(1)-$(2)
+	tar -cvzf $$(TOP)/$$(_$(1)-$(2)_PACKAGE) -C $$(TOP)/sdks/out/$(1)-$(2) .
+endef
+
+$(eval $(call LLVMProvisionTemplate,llvm,llvm32,$(LLVM_SRC)))
+$(eval $(call LLVMProvisionTemplate,llvm,llvm64,$(LLVM_SRC)))
+$(eval $(call LLVMProvisionTemplate,llvm,llvmwin32,$(LLVM_SRC)))
+$(eval $(call LLVMProvisionTemplate,llvm,llvmwin64,$(LLVM_SRC)))
+ifeq ($(UNAME),Darwin)
+$(eval $(call LLVMProvisionTemplate,llvm36,llvm32,$(LLVM36_SRC)))
+endif
+
+##
+# Parameters
+#  $(1): target
+define LLVMTemplate
+
+_llvm-$(1)_CMAKE_ARGS = \
+	$$(llvm-$(1)_CMAKE_ARGS)
+
+.PHONY: setup-llvm-$(1)
+setup-llvm-$(1):
+	mkdir -p $$(TOP)/sdks/out/llvm-$(1)
+
+.PHONY: package-llvm-$(1)
+package-llvm-$(1): setup-llvm-$(1) | $$(LLVM_SRC)
+	$$(MAKE) -C $$(TOP)/llvm -f build.mk install-llvm \
+		LLVM_PATH="$$(LLVM_SRC)" \
+		LLVM_BUILD="$$(TOP)/sdks/builds/llvm-$(1)" \
+		LLVM_PREFIX="$$(TOP)/sdks/out/llvm-$(1)" \
+		LLVM_CMAKE_ARGS="$$(_llvm-$(1)_CMAKE_ARGS)"
+
+.PHONY: clean-llvm-$(1)
+clean-llvm-$(1)::
+	$$(MAKE) -C $$(TOP)/llvm -f build.mk clean-llvm \
+		LLVM_PATH="$$(LLVM_SRC)" \
+		LLVM_BUILD="$$(TOP)/sdks/builds/llvm-$(1)" \
+		LLVM_PREFIX="$$(TOP)/sdks/out/llvm-$(1)"
+
+endef
+
+llvm-llvm32_CMAKE_ARGS=-DLLVM_BUILD_32_BITS=On
+$(eval $(call LLVMTemplate,llvm32))
+$(eval $(call LLVMTemplate,llvm64))
 
 ##
 # Parameters
 #  $(1): target
 #  $(2): arch
-define LLVMTemplate
+define LLVM36Template
 
-_llvm_$(1)_CXXFLAGS= \
+_llvm36-$(1)_CFLAGS=
+
+_llvm36-$(1)_CXXFLAGS= \
 	$$(if $$(filter $$(UNAME),Darwin),-mmacosx-version-min=10.9 -stdlib=libc++)
 
-_llvm_$(1)_LDFLAGS= \
+_llvm36-$(1)_LDFLAGS= \
 	$$(if $$(filter $$(UNAME),Darwin),-mmacosx-version-min=10.9)
 
-_llvm_$(1)_CONFIGURE_ENVIRONMENT= \
-	CXXFLAGS="$$(_llvm_$(1)_CXXFLAGS)" \
-	LDFLAGS="$$(_llvm_$(1)_LDFLAGS)"
+_llvm36-$(1)_CONFIGURE_ENVIRONMENT= \
+	$$(if $$(llvm36-$(1)_CC),CC="$$(llvm36-$(1)_CC)") \
+	$$(if $$(llvm36-$(1)_CXX),CXX="$$(llvm36-$(1)_CXX)") \
+	CFLAGS="$$(_llvm36-$(1)_CFLAGS)" \
+	CXXFLAGS="$$(_llvm36-$(1)_CXXFLAGS)" \
+	LDFLAGS="$$(_llvm36-$(1)_LDFLAGS)"
 
-_llvm_$(1)_CONFIGURE_FLAGS= \
-	--build=$$(if $$(filter $$(UNAME),Darwin),$(2)-apple-darwin10,$$(if $$(filter $$(UNAME),Linux),x86_64-linux-gnu,$$(error "Unknown UNAME='$$(UNAME)'"))) \
-	--cache-file=$$(TOP)/sdks/builds/llvm-$(1).config.cache \
-	--prefix=$$(TOP)/sdks/out/llvm-$(1) \
+_llvm36-$(1)_CONFIGURE_FLAGS= \
+	--host=$$(if $$(filter $$(UNAME),Darwin),$(2)-apple-darwin10,$$(if $$(filter $$(UNAME),Linux),$(2)-linux-gnu,$$(error "Unknown UNAME='$$(UNAME)'"))) \
+	--cache-file=$$(TOP)/sdks/builds/llvm36-$(1).config.cache \
+	--prefix=$$(TOP)/sdks/out/llvm36-$(1) \
 	--enable-assertions=no \
 	--enable-optimized \
 	--enable-targets="arm,aarch64,x86" \
 	$$(if $$(filter $$(UNAME),Darwin),--enable-libcpp)
 
-.stamp-llvm-$(1)-toolchain: | $$(LLVM_SRC)
+.stamp-llvm36-$(1)-configure: $$(LLVM36_SRC)/configure
+	mkdir -p $$(TOP)/sdks/builds/llvm36-$(1)
+	cd $$(TOP)/sdks/builds/llvm36-$(1) && $$< $$(_llvm36-$(1)_CONFIGURE_ENVIRONMENT) $$(_llvm36-$(1)_CONFIGURE_FLAGS)
 	touch $$@
 
-.stamp-llvm-$(1)-configure: $$(LLVM_SRC)/configure
-	mkdir -p $$(TOP)/sdks/builds/llvm-$(1)
-	cd $$(TOP)/sdks/builds/llvm-$(1) && $$< $$(_llvm_$(1)_CONFIGURE_ENVIRONMENT) $$(_llvm_$(1)_CONFIGURE_FLAGS)
-	touch $$@
+.PHONY: setup-llvm36-$(1)
+setup-llvm36-$(1):
+	mkdir -p $$(TOP)/sdks/out/llvm36-$(1)
 
-.PHONY: package-llvm-$(1)
-package-llvm-$(1):
-	$$(MAKE) -C $$(TOP)/sdks/builds/llvm-$(1) install
+.PHONY: build-llvm36-$(1)
+build-llvm36-$(1): .stamp-llvm36-$(1)-configure
+	$$(MAKE) -C $$(TOP)/sdks/builds/llvm36-$(1)
 
-.PHONY: clean-llvm-$(1)
-clean-llvm-$(1):
-	rm -rf .stamp-llvm-$(1)-toolchain .stamp-llvm-$(1)-configure $$(TOP)/sdks/builds/llvm-$(1) $$(TOP)/sdks/builds/llvm-$(1).config.cache $$(TOP)/sdks/out/llvm-$(1)
+.PHONY: package-llvm36-$(1)
+package-llvm36-$(1): setup-llvm36-$(1) build-llvm36-$(1)
+	$$(MAKE) -C $$(TOP)/sdks/builds/llvm36-$(1) install
 
-TARGETS += llvm-$(1)
+.PHONY: clean-llvm36-$(1)
+clean-llvm36-$(1)::
+	rm -rf .stamp-llvm36-$(1)-configure $$(TOP)/sdks/builds/llvm36-$(1) $$(TOP)/sdks/builds/llvm36-$(1).config.cache $$(TOP)/sdks/out/llvm36-$(1)
 
 endef
 
-$(eval $(call LLVMTemplate,llvm32,i386))
-$(eval $(call LLVMTemplate,llvm64,x86_64))
+ifeq ($(UNAME),Darwin)
+$(eval $(call LLVM36Template,llvm32,i386))
+endif
 
 ##
 # Parameters
 #  $(1): target
 #  $(2): arch
-#
-# Flags
-#  llvm_$(1)_CONFIGURE_ENVIRONMENT
+#  $(3): mxe
 define LLVMMxeTemplate
 
-_llvm_$(1)_PATH=$$(MXE_PREFIX)/bin
+# -DCROSS_TOOLCHAIN_FLAGS_NATIVE is needed to compile the native tools (tlbgen) using the host compilers
+# -DLLVM_ENABLE_THREADS=0 is needed because mxe doesn't define std::mutex etc.
+# -DLLVM_BUILD_EXECUTION_ENGINE=Off is needed because it depends on threads
+_llvm-$(1)_CMAKE_ARGS = \
+	-DCROSS_TOOLCHAIN_FLAGS_NATIVE=-DCMAKE_TOOLCHAIN_FILE=$$(LLVM_SRC)/cmake/modules/NATIVE.cmake \
+	-DCMAKE_TOOLCHAIN_FILE=$$(LLVM_SRC)/cmake/modules/$(3).cmake \
+	-DLLVM_ENABLE_THREADS=Off \
+	-DLLVM_BUILD_EXECUTION_ENGINE=Off \
+	$$(llvm-$(1)_CMAKE_ARGS)
 
-_llvm_$(1)_AR=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-ar
-_llvm_$(1)_AS=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-as
-_llvm_$(1)_CC=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-gcc
-_llvm_$(1)_CXX=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-g++
-_llvm_$(1)_DLLTOOL=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-dlltool
-_llvm_$(1)_LD=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-ld
-_llvm_$(1)_OBJDUMP=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-objdump
-_llvm_$(1)_RANLIB=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-ranlib
-_llvm_$(1)_STRIP=$$(MXE_PREFIX)/bin/$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static)-strip
+$$(LLVM_SRC)/cmake/modules/$(3).cmake: $(3).cmake.in | $$(LLVM_SRC)
+	sed -e 's,@MXE_PATH@,$$(MXE_PREFIX),' -e 's,@MXE_SUFFIX@,$$(if $$(filter $(UNAME),Darwin),.static),' < $$< > $$@
 
-_llvm_$(1)_CXXFLAGS=
-
-_llvm_$(1)_LDFLAGS=
-
-_llvm_$(1)_CONFIGURE_ENVIRONMENT = \
-	AR="$$(_llvm_$(1)_AR)" \
-	AS="$$(_llvm_$(1)_AS)" \
-	CC="$$(_llvm_$(1)_CC)" \
-	CXX="$$(_llvm_$(1)_CXX)" \
-	DLLTOOL="$$(_llvm_$(1)_DLLTOOL)" \
-	LD="$$(_llvm_$(1)_LD)" \
-	OBJDUMP="$$(_llvm_$(1)_OBJDUMP)" \
-	RANLIB="$$(_llvm_$(1)_RANLIB)" \
-	STRIP="$$(_llvm_$(1)_STRIP)" \
-	CXXFLAGS="$$(_llvm_$(1)_CXXFLAGS)" \
-	LDFLAGS="$$(_llvm_$(1)_LDFLAGS)"
-
-_llvm_$(1)_CONFIGURE_FLAGS = \
-	--host=$(2)-w64-mingw32$$(if $$(filter $(UNAME),Darwin),.static) \
-	--cache-file=$$(TOP)/sdks/builds/llvm-$(1).config.cache \
-	--prefix=$$(TOP)/sdks/out/llvm-$(1) \
-	--enable-assertions=no \
-	--enable-optimized \
-	--enable-targets="arm,aarch64,x86" \
-	--disable-pthreads \
-	--disable-zlib
-
-.stamp-llvm-$(1)-toolchain: | $$(LLVM_SRC)
-	touch $$@
-
-.stamp-llvm-$(1)-configure: $$(LLVM_SRC)/configure | $(if $(IGNORE_PROVISION_MXE),,provision-mxe)
-	mkdir -p $$(TOP)/sdks/builds/llvm-$(1)
-	cd $$(TOP)/sdks/builds/llvm-$(1) && PATH="$$$$PATH:$$(_llvm_$(1)_PATH)" $$< $$(_llvm_$(1)_CONFIGURE_ENVIRONMENT) $$(_llvm_$(1)_CONFIGURE_FLAGS)
-	touch $$@
+.PHONY: setup-llvm-$(1)
+setup-llvm-$(1):
+	mkdir -p $$(TOP)/sdks/out/llvm-$(1)
 
 .PHONY: package-llvm-$(1)
-package-llvm-$(1):
-	$$(MAKE) -C $$(TOP)/sdks/builds/llvm-$(1) install
+package-llvm-$(1): $$(LLVM_SRC)/cmake/modules/$(3).cmake setup-llvm-$(1) | $$(LLVM_SRC)
+	$$(MAKE) -C $$(TOP)/llvm -f build.mk install-llvm \
+		LLVM_PATH="$$(LLVM_SRC)" \
+		LLVM_BUILD="$$(TOP)/sdks/builds/llvm-$(1)" \
+		LLVM_PREFIX="$$(TOP)/sdks/out/llvm-$(1)" \
+		LLVM_CMAKE_ARGS="$$(_llvm-$(1)_CMAKE_ARGS)"
 
 .PHONY: clean-llvm-$(1)
-clean-llvm-$(1):
-	rm -rf .stamp-llvm-$(1)-toolchain .stamp-llvm-$(1)-configure $$(TOP)/sdks/builds/llvm-$(1) $$(TOP)/sdks/builds/llvm-$(1).config.cache $$(TOP)/sdks/out/llvm-$(1)
-
-TARGETS += llvm-$(1)
+clean-llvm-$(1)::
+	$$(MAKE) -C $$(TOP)/llvm -f build.mk clean-llvm \
+		LLVM_PATH="$$(LLVM_SRC)" \
+		LLVM_BUILD="$$(TOP)/sdks/builds/llvm-$(1)" \
+		LLVM_PREFIX="$$(TOP)/sdks/out/llvm-$(1)"
 
 endef
 
 ifneq ($(MXE_PREFIX),)
-$(eval $(call LLVMMxeTemplate,llvmwin32,i686))
-$(eval $(call LLVMMxeTemplate,llvmwin64,x86_64))
+llvm-llvmwin32_CMAKE_ARGS=-DLLVM_BUILD_32_BITS=On
+$(eval $(call LLVMMxeTemplate,llvmwin32,i686,mxe-Win32))
+$(eval $(call LLVMMxeTemplate,llvmwin64,x86_64,mxe-Win64))
 endif

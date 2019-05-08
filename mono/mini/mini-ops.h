@@ -42,6 +42,11 @@ MINI_OP(OP_CHECK_THIS,	"checkthis", NONE, IREG, NONE)
 MINI_OP(OP_SEQ_POINT, "seq_point", NONE, NONE, NONE)
 MINI_OP(OP_IL_SEQ_POINT, "il_seq_point", NONE, NONE, NONE)
 MINI_OP(OP_IMPLICIT_EXCEPTION, "implicit_exception", NONE, NONE, NONE)
+MINI_OP(OP_BOX, "box", IREG, IREG, NONE)
+/* A box of the int value in inst_c0 */
+MINI_OP(OP_BOX_ICONST, "box_iconst", IREG, NONE, NONE)
+/* Same as OP_MOVE, ins->dreg is an objref of type ins->klass */
+MINI_OP(OP_TYPED_OBJREF, "typed_objref", IREG, IREG, NONE)
 
 /* CALL opcodes need to stay together, see MONO_IS_CALL macro */
 MINI_OP(OP_VOIDCALL,	"voidcall", NONE, NONE, NONE)
@@ -207,9 +212,11 @@ MINI_OP(OP_SHR_IMM,    "shr_imm", IREG, IREG, NONE)
 MINI_OP(OP_SHR_UN_IMM, "shr_un_imm", IREG, IREG, NONE)
 
 MINI_OP(OP_BR,         "br", NONE, NONE, NONE)
-MINI_OP(OP_JMP,        "jmp", NONE, NONE, NONE)
-/* Same as OP_JMP, but the passing of arguments is done similarly to calls */
+/* Similar to old OP_JMP, but the passing of arguments is done similarly to calls */
 MINI_OP(OP_TAILCALL,   "tailcall", NONE, NONE, NONE)
+MINI_OP(OP_TAILCALL_PARAMETER, "tailcall_parameter", NONE, NONE, NONE) // no code, just size
+MINI_OP(OP_TAILCALL_REG, "tailcall_reg", NONE, IREG, NONE)
+MINI_OP(OP_TAILCALL_MEMBASE, "tailcall_membase", NONE, IREG, NONE)
 MINI_OP(OP_BREAK,      "break", NONE, NONE, NONE)
 
 MINI_OP(OP_CEQ,   "ceq", IREG, NONE, NONE)
@@ -664,6 +671,8 @@ MINI_OP(OP_IMIN, "int_min", IREG, IREG, IREG)
 MINI_OP(OP_IMAX, "int_max", IREG, IREG, IREG)
 MINI_OP(OP_LMIN, "long_min", LREG, LREG, LREG)
 MINI_OP(OP_LMAX, "long_max", LREG, LREG, LREG)
+MINI_OP(OP_RMAX,     "rmax", FREG, FREG, FREG)
+MINI_OP(OP_RPOW,     "rpow", FREG, FREG, FREG)
 
 /* opcodes most architecture have */
 MINI_OP(OP_ADC,     "adc", IREG, IREG, IREG)
@@ -702,9 +711,14 @@ MINI_OP(OP_TAN,     "tan", FREG, FREG, NONE)
 MINI_OP(OP_ATAN,    "atan", FREG, FREG, NONE)
 MINI_OP(OP_SQRT,    "sqrt", FREG, FREG, NONE)
 MINI_OP(OP_ROUND,   "round", FREG, FREG, NONE)
+MINI_OP(OP_SINF,     "sinf", FREG, FREG, NONE)
+MINI_OP(OP_COSF,     "cosf", FREG, FREG, NONE)
+MINI_OP(OP_ABSF,     "absf", FREG, FREG, NONE)
+MINI_OP(OP_SQRTF,    "sqrtf", FREG, FREG, NONE)
 /* to optimize strings */
 MINI_OP(OP_STRLEN, "strlen", IREG, IREG, NONE)
 MINI_OP(OP_NEWARR, "newarr", IREG, IREG, NONE)
+/* Load a readonly length field from [sreg1+inst_imm] */
 MINI_OP(OP_LDLEN, "ldlen", IREG, IREG, NONE)
 MINI_OP(OP_BOUNDS_CHECK, "bounds_check", NONE, IREG, IREG)
 /* type checks */
@@ -731,7 +745,6 @@ MINI_OP(OP_TLS_SET_REG,        "tls_set_reg", NONE, IREG, IREG)
 
 MINI_OP(OP_LOAD_GOTADDR, "load_gotaddr", IREG, NONE, NONE)
 MINI_OP(OP_DUMMY_USE, "dummy_use", NONE, IREG, NONE)
-MINI_OP(OP_DUMMY_STORE, "dummy_store", NONE, NONE, NONE)
 MINI_OP(OP_NOT_REACHED, "not_reached", NONE, NONE, NONE)
 MINI_OP(OP_NOT_NULL, "not_null", NONE, IREG, NONE)
 
@@ -953,6 +966,11 @@ MINI_OP(OP_CVTTPS2DQ, "cvttps2dq", XREG, XREG, NONE)
 /* multiply all 4 single precision float elements, add them together, and store the result to the lowest element */
 MINI_OP(OP_DPPS, "dpps", XREG, XREG, XREG)
 
+/* sse 4.1 */
+
+/* inst_c0 is the rounding mode: 0 = round, 1 = floor, 2 = ceiling */
+MINI_OP(OP_SSE41_ROUNDPD, "roundpd", XREG, XREG, NONE)
+
 #endif
 
 MINI_OP(OP_XMOVE,   "xmove", XREG, XREG, NONE)
@@ -1160,6 +1178,7 @@ MINI_OP(OP_AMD64_AND_MEMBASE_IMM,        "amd64_and_membase_imm", NONE, IREG, NO
 MINI_OP(OP_AMD64_OR_MEMBASE_IMM,         "amd64_or_membase_imm", NONE, IREG, NONE)
 MINI_OP(OP_AMD64_XOR_MEMBASE_IMM,        "amd64_xor_membase_imm", NONE, IREG, NONE)
 MINI_OP(OP_AMD64_MUL_MEMBASE_IMM,        "amd64_mul_membase_imm", NONE, IREG, NONE)
+MINI_OP(OP_AMD64_LEA_MEMBASE,            "amd64_lea_membase", IREG, IREG, NONE)
 
 MINI_OP(OP_AMD64_ADD_REG_MEMBASE,        "amd64_add_reg_membase", IREG, IREG, IREG)
 MINI_OP(OP_AMD64_SUB_REG_MEMBASE,        "amd64_sub_reg_membase", IREG, IREG, IREG)

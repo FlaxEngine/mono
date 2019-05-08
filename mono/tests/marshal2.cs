@@ -35,7 +35,8 @@ public class Tests {
 		public SimpleObj emb2;
 		public string s2;
 		public double x;
-		[MarshalAs (UnmanagedType.ByValArray, SizeConst=2)] public char[] a2;
+		[MarshalAs (UnmanagedType.ByValArray, SizeConst=2)]
+		public char[] a2;
 	}
 
 	[StructLayout (LayoutKind.Sequential, CharSet=CharSet.Ansi)]
@@ -59,6 +60,26 @@ public class Tests {
 	public struct PackStruct2 {
 		byte b;
 		PackStruct1 s;
+	}
+
+	[StructLayout (LayoutKind.Sequential)]
+	struct InvalidArrayForMarshalingStruct
+	{
+		// Missing the following needed directive
+		// [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+		public readonly char[] CharArray;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct TwoDimensionalArrayStruct
+	{
+		public TwoDimensionalArrayStruct(int[,] vals)
+		{
+			TwoDimensionalArray = vals;
+		}
+
+		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
+		public readonly int[,] TwoDimensionalArray;
 	}
 	
 	public unsafe static int Main (String[] args) {
@@ -292,5 +313,27 @@ public class Tests {
 		if (s.b != 2)
 			return 2;
 		return 0;
+	}
+
+	public static int test_0_invalid_array_throws () {
+		var ptr = Marshal.AllocHGlobal(Marshal.SizeOf (typeof (InvalidArrayForMarshalingStruct)));
+		try {
+			Marshal.PtrToStructure (ptr, typeof (InvalidArrayForMarshalingStruct));
+		}
+		catch (MarshalDirectiveException e) {
+			return 0;
+		}
+		return 1;
+	}
+
+	public static int test_0_multidimentional_arrays () {
+		var structToMarshal = new TwoDimensionalArrayStruct (new[, ] { {1, 2, 3}, {4, 5, 6} });
+		var ptr = Marshal.AllocHGlobal (Marshal.SizeOf (structToMarshal));
+		Marshal.StructureToPtr (structToMarshal, ptr, false);
+		unsafe {
+			if(((int*)ptr)[4] == 5)
+				return 0;
+		}
+		return 1;
 	}
 }

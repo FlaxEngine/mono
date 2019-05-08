@@ -30,9 +30,9 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace Xamarin.ApiDiff {
+namespace Mono.ApiTools {
 
-	public class ClassComparer : Comparer {
+	class ClassComparer : Comparer {
 
 		InterfaceComparer icomparer;
 		ConstructorComparer ccomparer;
@@ -42,14 +42,15 @@ namespace Xamarin.ApiDiff {
 		MethodComparer mcomparer;
 		ClassComparer kcomparer;
 
-		public ClassComparer ()
+		public ClassComparer (State state)
+			: base (state)
 		{
-			icomparer = new InterfaceComparer ();
-			ccomparer = new ConstructorComparer ();
-			fcomparer = new FieldComparer ();
-			pcomparer = new PropertyComparer ();
-			ecomparer = new EventComparer ();
-			mcomparer = new MethodComparer ();
+			icomparer = new InterfaceComparer (state);
+			ccomparer = new ConstructorComparer (state);
+			fcomparer = new FieldComparer (state);
+			pcomparer = new PropertyComparer (state);
+			ecomparer = new EventComparer (state);
+			mcomparer = new MethodComparer (state);
 		}
 
 		public override void SetContext (XElement current)
@@ -69,18 +70,15 @@ namespace Xamarin.ApiDiff {
 
 		public override void Added (XElement target, bool wasParentAdded)
 		{
-			string name = target.Attribute ("name").Value;
-			var addedDescription  = $"{State.Namespace}.{name}: Added type";
+			var addedDescription  = $"{State.Namespace}.{State.Type}: Added type";
 			State.LogDebugMessage ($"Possible -n value: {addedDescription}");
 			if (State.IgnoreNew.Any (re => re.IsMatch (addedDescription)))
 				return;
-			Output.WriteLine ("<div> <!-- start type {0} -->", name);
-			Output.WriteLine ("<h3>New Type {0}.{1}</h3>", State.Namespace, name);
-			Output.WriteLine ("<pre class='added' data-is-non-breaking>");
+
+			Formatter.BeginTypeAddition (Output);
 			State.Indent = 0;
 			AddedInner (target);
-			Output.WriteLine ("</pre>");
-			Output.WriteLine ("</div> <!-- end type {0} -->", name);
+			Formatter.EndTypeAddition (Output);
 		}
 
 		public void AddedInner (XElement target)
@@ -149,9 +147,10 @@ namespace Xamarin.ApiDiff {
 
 			Output.WriteLine (" {");
 
+			State.Indent++;
 			var t = target.Element ("constructors");
 			if (t != null) {
-				Indent ().WriteLine ("\t// constructors");
+				Indent ().WriteLine ("// constructors");
 				foreach (var ctor in t.Elements ("constructor"))
 					ccomparer.Added (ctor, true);
 			}
@@ -159,7 +158,7 @@ namespace Xamarin.ApiDiff {
 			t = target.Element ("fields");
 			if (t != null) {
 				if (type != "enum")
-					Indent ().WriteLine ("\t// fields");
+					Indent ().WriteLine ("// fields");
 				else
 					SetContext (target);
 				foreach (var field in t.Elements ("field"))
@@ -168,21 +167,21 @@ namespace Xamarin.ApiDiff {
 
 			t = target.Element ("properties");
 			if (t != null) {
-				Indent ().WriteLine ("\t// properties");
+				Indent ().WriteLine ("// properties");
 				foreach (var property in t.Elements ("property"))
 					pcomparer.Added (property, true);
 			}
 
 			t = target.Element ("events");
 			if (t != null) {
-				Indent ().WriteLine ("\t// events");
+				Indent ().WriteLine ("// events");
 				foreach (var evnt in t.Elements ("event"))
 					ecomparer.Added (evnt, true);
 			}
 
 			t = target.Element ("methods");
 			if (t != null) {
-				Indent ().WriteLine ("\t// methods");
+				Indent ().WriteLine ("// methods");
 				foreach (var method in t.Elements ("method"))
 					mcomparer.Added (method, true);
 			}
@@ -190,13 +189,14 @@ namespace Xamarin.ApiDiff {
 			t = target.Element ("classes");
 			if (t != null) {
 				Output.WriteLine ();
-				Indent ().WriteLine ("\t// inner types");
-				kcomparer = new NestedClassComparer ();
-				State.Indent++;
+				Indent ().WriteLine ("// inner types");
+				State.Parent = State.Type;
+				kcomparer = new NestedClassComparer (State);
 				foreach (var inner in t.Elements ("class"))
 					kcomparer.AddedInner (inner);
-				State.Indent--;
+				State.Type = State.Parent;
 			}
+			State.Indent--;
 			Indent ().WriteLine ("}");
 		}
 
@@ -227,8 +227,10 @@ namespace Xamarin.ApiDiff {
 			if (sb != tb &&
 					!State.IgnoreRemoved.Any (re => re.IsMatch (rm)) &&
 					!(State.IgnoreNonbreaking && IsBaseChangeCompatible (sb, tb))) {
-				Output.Write ("Modified base type: ");
-				Output.WriteLine (new ApiChange ($"{State.Namespace}.{State.Type}").AppendModified (sb, tb, true).Member.ToString ());
+				Formatter.BeginMemberModification (Output, "Modified base type");
+				var apichange = new ApiChange ($"{State.Namespace}.{State.Type}", State).AppendModified (sb, tb, true);
+				Formatter.Diff (Output, apichange);
+				Formatter.EndMemberModification (Output);
 			}
 
 			ccomparer.Compare (source, target);
@@ -241,18 +243,19 @@ namespace Xamarin.ApiDiff {
 			var si = source.Element ("classes");
 			if (si != null) {
 				var ti = target.Element ("classes");
-				kcomparer = new NestedClassComparer ();
+				kcomparer = new NestedClassComparer (State);
+				State.Parent = State.Type;
 				kcomparer.Compare (si.Elements ("class"), ti == null ? null : ti.Elements ("class"));
+				State.Type = State.Parent;
 			}
 
 			var s = (Output as StringWriter).ToString ();
 			State.Output = output;
 			if (s.Length > 0) {
-				var tn = GetTypeName (target);
-				Output.WriteLine ("<!-- start type {0} --> <div>", tn);
-				Output.WriteLine ("<h3>Type Changed: {0}.{1}</h3>", State.Namespace, GetTypeName (target));
+				SetContext (target);
+				Formatter.BeginTypeModification (Output);
 				Output.WriteLine (s);
-				Output.WriteLine ("</div> <!-- end type {0} -->", tn);
+				Formatter.EndTypeModification (Output);
 			}
 		}
 
@@ -261,14 +264,15 @@ namespace Xamarin.ApiDiff {
 			if (source.Elements ("attributes").SelectMany (a => a.Elements ("attribute")).Any (c => c.Attribute ("name")?.Value == "System.ObsoleteAttribute"))
 				return;
 
-      string name = State.Namespace + "." + GetTypeName (source);
+			string name = State.Namespace + "." + State.Type;
 
 			var memberDescription = $"{name}: Removed type";
 			State.LogDebugMessage ($"Possible -r value: {memberDescription}");
 			if (State.IgnoreRemoved.Any (re => re.IsMatch (name)))
 				return;
 
-			Output.Write ("<h3>Removed Type <span class='breaking' data-is-breaking>{0}</span></h3>", name);
+			Formatter.BeginTypeRemoval (Output);
+			Formatter.EndTypeRemoval (Output);
 		}
 
 		public virtual string GetTypeName (XElement type)
@@ -277,15 +281,22 @@ namespace Xamarin.ApiDiff {
 		}
 	}
 
-	public class NestedClassComparer : ClassComparer {
+	class NestedClassComparer : ClassComparer {
+
+		public NestedClassComparer (State state)
+			: base (state)
+		{
+		}
 
 		public override void SetContext (XElement current)
 		{
+			State.Type = State.Parent + "." + current.GetAttribute ("name");
+			State.BaseType = current.GetAttribute ("base");
 		}
 
 		public override string GetTypeName (XElement type)
 		{
-			return State.Type + "." + base.GetTypeName (type);
+			return State.Parent + "." + base.GetTypeName (type);
 		}
 	}
 }

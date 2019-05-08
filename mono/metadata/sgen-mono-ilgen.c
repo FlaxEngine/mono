@@ -17,8 +17,10 @@
 #include "sgen/sgen-cardtable.h"
 #include "sgen/sgen-pinning.h"
 #include "sgen/sgen-workers.h"
+#include "metadata/class-init.h"
 #include "metadata/marshal.h"
 #include "metadata/abi-details.h"
+#include "metadata/class-abi-details.h"
 #include "metadata/mono-gc.h"
 #include "metadata/runtime.h"
 #include "metadata/sgen-bridge-internals.h"
@@ -46,7 +48,7 @@ enum {
 // Cache the SgenThreadInfo pointer in a local 'var'.
 #define EMIT_TLS_ACCESS_VAR(mb, var) \
 	do { \
-		var = mono_mb_add_local ((mb), &mono_defaults.int_class->byval_arg); \
+		var = mono_mb_add_local ((mb), mono_get_int_type ());	\
 		mono_mb_emit_byte ((mb), MONO_CUSTOM_PREFIX); \
 		mono_mb_emit_byte ((mb), CEE_MONO_TLS); \
 		mono_mb_emit_i4 ((mb), TLS_KEY_SGEN_THREAD_INFO); \
@@ -77,7 +79,7 @@ enum {
 static void
 emit_nursery_check (MonoMethodBuilder *mb, int *nursery_check_return_labels, gboolean is_concurrent)
 {
-	int shifted_nursery_start = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	int shifted_nursery_start = mono_mb_add_local (mb, mono_get_int_type ());
 
 	memset (nursery_check_return_labels, 0, sizeof (int) * 2);
 	// if (ptr_in_nursery (ptr)) return;
@@ -142,8 +144,8 @@ emit_nursery_check_ilgen (MonoMethodBuilder *mb, gboolean is_concurrent)
 	mono_mb_emit_icon (mb, CARD_BITS);
 	mono_mb_emit_byte (mb, CEE_SHR_UN);
 	mono_mb_emit_byte (mb, CEE_CONV_I);
-#ifdef SGEN_HAVE_OVERLAPPING_CARDS
-#if SIZEOF_VOID_P == 8
+#ifdef SGEN_TARGET_HAVE_OVERLAPPING_CARDS
+#if TARGET_SIZEOF_VOID_P == 8
 	mono_mb_emit_icon8 (mb, CARD_MASK);
 #else
 	mono_mb_emit_icon (mb, CARD_MASK);
@@ -171,6 +173,7 @@ emit_nursery_check_ilgen (MonoMethodBuilder *mb, gboolean is_concurrent)
 static void
 emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean profiler, int atype)
 {
+#ifdef MANAGED_ALLOCATION
 	int p_var, size_var, real_size_var, thread_var G_GNUC_UNUSED;
 	int tlab_next_addr_var, new_next_var;
 	guint32 fastpath_branch, max_size_branch, no_oom_branch;
@@ -198,13 +201,15 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 		goto done;
 	}
 
+	MonoType *int_type;
+	int_type = mono_get_int_type ();
 	/*
 	 * Tls access might call foreign code or code without jinfo. This can
 	 * only happen if we are outside of the critical region.
 	 */
 	EMIT_TLS_ACCESS_VAR (mb, thread_var);
 
-	size_var = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	size_var = mono_mb_add_local (mb, int_type);
 	if (atype == ATYPE_SMALL) {
 		/* size_var = size_arg */
 		mono_mb_emit_ldarg (mb, 1);
@@ -215,13 +220,14 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 		mono_mb_emit_icon (mb, MONO_STRUCT_OFFSET (MonoVTable, klass));
 		mono_mb_emit_byte (mb, CEE_ADD);
 		mono_mb_emit_byte (mb, CEE_LDIND_I);
-		mono_mb_emit_icon (mb, MONO_STRUCT_OFFSET (MonoClass, instance_size));
+		mono_mb_emit_icon (mb, m_class_offsetof_instance_size ());
 		mono_mb_emit_byte (mb, CEE_ADD);
 		/* FIXME: assert instance_size stays a 4 byte integer */
 		mono_mb_emit_byte (mb, CEE_LDIND_U4);
 		mono_mb_emit_byte (mb, CEE_CONV_I);
 		mono_mb_emit_stloc (mb, size_var);
 	} else if (atype == ATYPE_VECTOR) {
+		ERROR_DECL (error);
 		MonoExceptionClause *clause;
 		int pos, pos_leave, pos_error;
 		MonoClass *oom_exc_class;
@@ -258,7 +264,7 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 		mono_mb_emit_icon (mb, MONO_STRUCT_OFFSET (MonoVTable, klass));
 		mono_mb_emit_byte (mb, CEE_ADD);
 		mono_mb_emit_byte (mb, CEE_LDIND_I);
-		mono_mb_emit_icon (mb, MONO_STRUCT_OFFSET (MonoClass, sizes));
+		mono_mb_emit_icon (mb, m_class_offsetof_sizes ());
 		mono_mb_emit_byte (mb, CEE_ADD);
 		mono_mb_emit_byte (mb, CEE_LDIND_U4);
 		mono_mb_emit_byte (mb, CEE_CONV_I);
@@ -282,7 +288,8 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 
 		oom_exc_class = mono_class_load_from_name (mono_defaults.corlib,
 				"System", "OutOfMemoryException");
-		ctor = mono_class_get_method_from_name (oom_exc_class, ".ctor", 0);
+		ctor = mono_class_get_method_from_name_checked (oom_exc_class, ".ctor", 0, 0, error);
+		mono_error_assert_ok (error);
 		g_assert (ctor);
 
 		mono_mb_emit_byte (mb, CEE_POP);
@@ -338,8 +345,8 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 	mono_mb_emit_i4 (mb, MONO_MEMORY_BARRIER_NONE);
 #endif
 
-	if (nursery_canaries_enabled ()) {
-		real_size_var = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	if (sgen_nursery_canaries_enabled ()) {
+		real_size_var = mono_mb_add_local (mb, int_type);
 		mono_mb_emit_ldloc (mb, size_var);
 		mono_mb_emit_stloc(mb, real_size_var);
 	}
@@ -368,24 +375,24 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 	 */
 
 	/* tlab_next_addr (local) = tlab_next_addr (TLS var) */
-	tlab_next_addr_var = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	tlab_next_addr_var = mono_mb_add_local (mb, int_type);
 	EMIT_TLS_ACCESS_NEXT_ADDR (mb, thread_var);
 	mono_mb_emit_stloc (mb, tlab_next_addr_var);
 
 	/* p = (void**)tlab_next; */
-	p_var = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	p_var = mono_mb_add_local (mb, int_type);
 	mono_mb_emit_ldloc (mb, tlab_next_addr_var);
 	mono_mb_emit_byte (mb, CEE_LDIND_I);
 	mono_mb_emit_stloc (mb, p_var);
 	
 	/* new_next = (char*)p + size; */
-	new_next_var = mono_mb_add_local (mb, &mono_defaults.int_class->byval_arg);
+	new_next_var = mono_mb_add_local (mb, int_type);
 	mono_mb_emit_ldloc (mb, p_var);
 	mono_mb_emit_ldloc (mb, size_var);
 	mono_mb_emit_byte (mb, CEE_CONV_I);
 	mono_mb_emit_byte (mb, CEE_ADD);
 
-	if (nursery_canaries_enabled ()) {
+	if (sgen_nursery_canaries_enabled ()) {
 			mono_mb_emit_icon (mb, CANARY_SIZE);
 			mono_mb_emit_byte (mb, CEE_ADD);
 	}
@@ -454,7 +461,7 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 	mono_mb_emit_byte (mb, CEE_STIND_I);
 
 	/* mark object end with nursery word */
-	if (nursery_canaries_enabled ()) {
+	if (sgen_nursery_canaries_enabled ()) {
 			mono_mb_emit_ldloc (mb, p_var);
 			mono_mb_emit_ldloc (mb, real_size_var);
 			mono_mb_emit_byte (mb, MONO_CEE_ADD);
@@ -530,6 +537,9 @@ emit_managed_allocater_ilgen (MonoMethodBuilder *mb, gboolean slowpath, gboolean
 
 	mono_mb_emit_byte (mb, CEE_RET);
 	mb->init_locals = FALSE;
+#else
+	g_assert_not_reached ();
+#endif /* MANAGED_ALLOCATION */
 }
 
 void
