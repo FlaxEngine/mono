@@ -1,3 +1,6 @@
+Mono/NativePlatformTest.cs
+Mono/MonoNativePlatform.cs
+Mono/MonoNativePlatformType.cs
 Microsoft.Win32/RegistryKeyTest.cs
 System.Diagnostics.Contracts/ContractAssertTest.cs
 System.Diagnostics.Contracts/ContractAssumeTest.cs
@@ -35,6 +38,7 @@ System.Runtime.Remoting/ContextTest.cs
 System.Runtime.Remoting/RemotingConfigurationTest.cs
 System.Runtime.Remoting/SoapServicesTest.cs
 System.Runtime.Remoting/SynchronizationAttributeTest.cs
+System.Runtime.Remoting/RemotingServicesTest.cs
 System.Runtime.Remoting.Channels/ChannelServicesTest.cs
 System.Runtime.Remoting.Contexts/SynchronizationAttributeTest.cs
 System.Runtime.Remoting.Messaging/CallContextTest.cs
@@ -119,8 +123,6 @@ System.Security.Policy/NetCodeGroupTest.cs
 System.Security.Policy/PermissionRequestEvidenceTest.cs
 System.Security.Policy/PolicyLevelTest.cs
 System.Security.Policy/PolicyStatementTest.cs
-System.Security.Policy/PublisherMembershipConditionTest.cs
-System.Security.Policy/PublisherTest.cs
 System.Security.Policy/SiteMembershipConditionTest.cs
 System.Security.Policy/SiteTest.cs
 System.Security.Policy/StrongNameMembershipConditionTest.cs

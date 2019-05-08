@@ -79,27 +79,25 @@ g_file_test (const gchar *filename, GFileTest test)
 	return FALSE;
 }
 
-#ifdef _AIX
-/* HACK: the preprocessor will not give us mkdtemp no matter
-   what and Mono (for good reason) does
-   "-Werror-implicit-function-declaration" so we error out;
-   instead declare mkdtemp here; the linker will find mkdtemp
-   anwyays. libuv has had similar issues, but they just ignore
-   the compiler warning instead of failing on it.
-   
-   See: github.com/libuv/libuv/pull/740 */
-
-extern char *mkdtemp(char *);
-#endif
-
 gchar *
-g_mkdtemp (char *tmp_template)
+g_mkdtemp (char *temp)
 {
-#ifdef HAVE_MKDTEMP
-	char *template_copy = g_strdup (tmp_template);
-
-	return mkdtemp (template_copy);
+/*
+ * On systems without mkdtemp, use a reimplemented version
+ * adapted from the Win32 version of this file. AIX is an
+ * exception because i before version 7.2 lacks mkdtemp in
+ * libc, and GCC can "fix" system headers so that it isn't
+ * present without redefining it.
+ */
+#if defined(HAVE_MKDTEMP) && !defined(_AIX)
+	return mkdtemp (g_strdup (temp));
 #else
-	g_error("Function mkdtemp not supported");
+	temp = mktemp (g_strdup (temp));
+	/* 0700 is the mode specified in specs */
+	if (temp && *temp && mkdir (temp, 0700) == 0)
+		return temp;
+
+	g_free (temp);
+	return NULL;
 #endif
 }

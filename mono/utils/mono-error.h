@@ -35,6 +35,7 @@ enum {
 	MONO_ERROR_ARGUMENT_NULL = 11,
 	MONO_ERROR_NOT_VERIFIABLE = 8,
 	MONO_ERROR_INVALID_PROGRAM = 12,
+	MONO_ERROR_MEMBER_ACCESS = 13,
 
 	/*
 	 * This is a generic error mechanism is you need to raise an arbitrary corlib exception.
@@ -65,8 +66,7 @@ typedef struct _MonoErrorBoxed MonoErrorBoxed;
 
 MONO_BEGIN_DECLS
 
-MONO_RT_EXTERNAL_ONLY
-MONO_API void
+MONO_API MONO_RT_EXTERNAL_ONLY void
 mono_error_init (MonoError *error);
 
 MONO_API void

@@ -54,7 +54,11 @@ mono_dl_open_file (const char *file, int flags)
 		guint last_sem = SetErrorMode (SEM_FAILCRITICALERRORS);
 		guint32 last_error = 0;
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		hModule = LoadLibrary (file_utf16);
+#else
+		hModule = LoadPackagedLibrary (file_utf16, NULL);
+#endif
 		if (!hModule)
 			last_error = GetLastError ();
 
@@ -65,7 +69,11 @@ mono_dl_open_file (const char *file, int flags)
 		if (!hModule)
 			SetLastError (last_error);
 	} else {
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		hModule = GetModuleHandle (NULL);
+#else
+		g_error("Not supported");
+#endif
 	}
 	return hModule;
 }
@@ -75,7 +83,7 @@ void
 mono_dl_close_handle (MonoDl *module)
 {
 	if (!module->main_module)
-		FreeLibrary (module->handle);
+		FreeLibrary ((HMODULE)module->handle);
 }
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
@@ -116,7 +124,7 @@ mono_dl_lookup_symbol_in_process (const char *symbol_name)
 	}
 
 	for (i = 0; i < needed / sizeof (HANDLE); i++) {
-		proc = GetProcAddress (modules [i], symbol_name);
+		proc = (gpointer)GetProcAddress (modules [i], symbol_name);
 		if (proc != NULL) {
 			g_free (modules);
 			return proc;
@@ -135,10 +143,10 @@ mono_dl_lookup_symbol (MonoDl *module, const char *symbol_name)
 
 	/* get the symbol directly from the specified module */
 	if (!module->main_module)
-		return GetProcAddress (module->handle, symbol_name);
+		return (void*)GetProcAddress ((HMODULE)module->handle, symbol_name);
 
 	/* get the symbol from the main module */
-	proc = GetProcAddress (module->handle, symbol_name);
+	proc = (gpointer)GetProcAddress ((HMODULE)module->handle, symbol_name);
 	if (proc != NULL)
 		return proc;
 

@@ -133,7 +133,7 @@ mono_internal_hash_table_foreach_remove(MonoInternalHashTable* table, MonoIntern
 	}
 }
 
-void
+gboolean
 mono_internal_hash_table_remove (MonoInternalHashTable *table, gpointer key)
 {
 	gint hash = HASH (key, table->hash_func, table->size);
@@ -146,9 +146,9 @@ mono_internal_hash_table_remove (MonoInternalHashTable *table, gpointer key)
 		{
 			*value = *(table->next_value (*value));
 			--table->num_entries;
-			return;
+			return TRUE;
 		}
 	}
 
-	// Do not fail here
+	return FALSE;
 }

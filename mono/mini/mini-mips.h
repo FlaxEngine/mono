@@ -166,7 +166,6 @@ typedef gdouble		mips_freg;
 #define mips_ftemp mips_f18
 
 #define MONO_ARCH_USE_FPSTACK FALSE
-#define MONO_ARCH_FPSTACK_SIZE 0
 
 /* Parameters used by the register allocator */
 
@@ -217,7 +216,7 @@ struct MonoLMF {
 };
 
 typedef struct MonoCompileArch {
-	gpointer    cinfo;
+	CallInfo	*cinfo;
 	guint		iregs_offset;
 	guint		lmf_offset;
 	guint		local_alloc_offset;
@@ -290,6 +289,10 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_USE_SIGACTION
 #define MONO_ARCH_NEED_DIV_CHECK 1
 #define MONO_ARCH_NO_IOV_CHECK 1
+
+// Does the ABI have a volatile non-parameter register, so tailcall
+// can pass context to generics or interfaces?
+#define MONO_ARCH_HAVE_VOLATILE_NON_PARAM_REGISTER 0 // FIXME?
 
 #define MIPS_NUM_REG_ARGS (MIPS_LAST_ARG_REG-MIPS_FIRST_ARG_REG+1)
 #define MIPS_NUM_REG_FPARGS (MIPS_LAST_FPARG_REG-MIPS_FIRST_FPARG_REG+1)

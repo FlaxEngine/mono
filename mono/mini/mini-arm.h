@@ -93,7 +93,6 @@
 #endif
 
 #define MONO_ARCH_USE_FPSTACK FALSE
-#define MONO_ARCH_FPSTACK_SIZE 0
 
 #define MONO_ARCH_INST_SREG2_MASK(ins) (0)
 
@@ -169,7 +168,8 @@ typedef struct {
 	int gsharedvt_in;
 	/* Whenever this call uses fp registers */
 	int have_fregs;
-	gpointer caller_cinfo, callee_cinfo;
+	CallInfo *caller_cinfo;
+	CallInfo *callee_cinfo;
 	/* Maps stack slots/registers in the caller to the stack slots/registers in the callee */
 	/* A negative value means a register, i.e. -1=r0, -2=r1 etc. */
 	int map [MONO_ZERO_LEN_ARRAY];
@@ -213,7 +213,7 @@ typedef struct {
 	guint8  size    : 4; /* 1, 2, 4, 8, or regs used by RegTypeStructByVal */
 } ArgInfo;
 
-typedef struct {
+struct CallInfo {
 	int nargs;
 	guint32 stack_usage;
 	/* The index of the vret arg in the argument list for RegTypeStructByAddr */
@@ -221,7 +221,7 @@ typedef struct {
 	ArgInfo ret;
 	ArgInfo sig_cookie;
 	ArgInfo args [1];
-} CallInfo;
+};
 
 #define PARAM_REGS 4
 #define FP_PARAM_REGS 8
@@ -237,12 +237,12 @@ typedef struct {
 } CallContext;
 
 /* Structure used by the sequence points in AOTed code */
-typedef struct {
+struct SeqPointInfo {
 	gpointer ss_trigger_page;
 	gpointer bp_trigger_page;
 	gpointer ss_tramp_addr;
 	guint8* bp_addrs [MONO_ZERO_LEN_ARRAY];
-} SeqPointInfo;
+};
 
 typedef struct {
 	double fpregs [FP_PARAM_REGS];
@@ -295,13 +295,15 @@ struct MonoLMF {
 };
 
 typedef struct MonoCompileArch {
-	gpointer seq_point_info_var, ss_trigger_page_var;
-	gpointer seq_point_ss_method_var;
-	gpointer seq_point_bp_method_var;
-	gpointer vret_addr_loc;
-	gboolean omit_fp, omit_fp_computed;
-	gpointer cinfo;
-	gpointer *vfp_scratch_slots [2];
+	MonoInst *seq_point_info_var;
+	MonoInst *ss_trigger_page_var;
+	MonoInst *seq_point_ss_method_var;
+	MonoInst *seq_point_bp_method_var;
+	MonoInst *vret_addr_loc;
+	gboolean omit_fp;
+	gboolean omit_fp_computed;
+	CallInfo *cinfo;
+	MonoInst *vfp_scratch_slots [2];
 	int atomic_tmp_offset;
 	guint8 *thunks;
 	int thunks_size;
@@ -332,12 +334,16 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
 #define MONO_ARCH_HAVE_DECOMPOSE_LONG_OPTS 1
 
+#define MONO_ARCH_INTERPRETER_SUPPORTED 1
 #define MONO_ARCH_AOT_SUPPORTED 1
 #define MONO_ARCH_LLVM_SUPPORTED 1
 
 #define MONO_ARCH_GSHARED_SUPPORTED 1
 #define MONO_ARCH_DYN_CALL_SUPPORTED 1
 #define MONO_ARCH_DYN_CALL_PARAM_AREA 0
+
+#define MONO_ARCH_HAVE_OP_TAILCALL_MEMBASE 1
+#define MONO_ARCH_HAVE_OP_TAILCALL_REG 1
 
 #if !(defined(TARGET_ANDROID) && defined(MONO_CROSS_COMPILE))
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED 1
@@ -355,15 +361,16 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_HAVE_GENERAL_RGCTX_LAZY_FETCH_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_OPCODE_NEEDS_EMULATION 1
 #define MONO_ARCH_HAVE_OBJC_GET_SELECTOR 1
-#define MONO_ARCH_HAVE_OP_TAIL_CALL 1
-#define MONO_ARCH_HAVE_DUMMY_INIT 1
 #define MONO_ARCH_HAVE_SDB_TRAMPOLINES 1
 #define MONO_ARCH_HAVE_PATCH_CODE_NEW 1
 #define MONO_ARCH_HAVE_OP_GENERIC_CLASS_INIT 1
+#define MONO_ARCH_FLOAT32_SUPPORTED 1
+#define MONO_ARCH_LLVM_TARGET_LAYOUT "e-p:32:32-n32-S64"
 
 #define MONO_ARCH_HAVE_INTERP_ENTRY_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_FTNPTR_ARG_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_INTERP_PINVOKE_TRAMP 1
+#define MONO_ARCH_HAVE_INTERP_NATIVE_TO_MANAGED 1
 
 #if defined(TARGET_WATCHOS) || (defined(__linux__) && !defined(TARGET_ANDROID))
 #define MONO_ARCH_DISABLE_HW_TRAPS 1
@@ -375,7 +382,10 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_IMT_REG MONO_ARCH_RGCTX_REG
 /* First argument reg */
 #define MONO_ARCH_VTABLE_REG ARMREG_R0
-#define MONO_ARCH_EXC_REG ARMREG_R0
+
+// Does the ABI have a volatile non-parameter register, so tailcall
+// can pass context to generics or interfaces?
+#define MONO_ARCH_HAVE_VOLATILE_NON_PARAM_REGISTER 0
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->regs [0] = (gsize)exc; } while (0)
 

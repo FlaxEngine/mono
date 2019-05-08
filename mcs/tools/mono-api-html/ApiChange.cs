@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Xml.Linq;
 
-namespace Xamarin.ApiDiff
-{
-	public class ApiChange
+namespace Mono.ApiTools {
+
+	class ApiChange
 	{
 		public string Header;
 		public StringBuilder Member = new StringBuilder ();
@@ -14,10 +14,12 @@ namespace Xamarin.ApiDiff
 		public bool AnyChange;
 		public bool HasIgnoredChanges;
 		public string SourceDescription;
+		public State State;
 
-		public ApiChange (string sourceDescription)
+		public ApiChange (string sourceDescription, State state)
 		{
 			SourceDescription = sourceDescription;
+			State = state;
 		}
 
 		public ApiChange Append (string text)
@@ -28,9 +30,7 @@ namespace Xamarin.ApiDiff
 
 		public ApiChange AppendAdded (string text, bool breaking = false)
 		{
-			Member.Append ("<span class='added ").Append (breaking ? "added-breaking-inline" : string.Empty).Append ("'>");
-			Member.Append (text);
-			Member.Append ("</span>");
+			State.Formatter.DiffAddition (Member, text, breaking);
 			Breaking |= breaking;
 			AnyChange = true;
 			return this;
@@ -38,9 +38,7 @@ namespace Xamarin.ApiDiff
 
 		public ApiChange AppendRemoved (string text, bool breaking = true)
 		{
-			Member.Append ("<span class='removed removed-inline ").Append (breaking ? "removed-breaking-inline" : string.Empty).Append ("'>");
-			Member.Append (text);
-			Member.Append ("</span>");
+			State.Formatter.DiffRemoval (Member, text, breaking);
 			Breaking |= breaking;
 			AnyChange = true;
 			return this;
@@ -48,19 +46,22 @@ namespace Xamarin.ApiDiff
 
 		public ApiChange AppendModified (string old, string @new, bool breaking = true)
 		{
-			if (old.Length > 0)
-				AppendRemoved (old, breaking);
-			if (old.Length > 0 && @new.Length > 0)
-				Append (" ");
-			if (@new.Length > 0)
-				AppendAdded (@new);
+			State.Formatter.DiffModification (Member, old, @new, breaking);
 			Breaking |= breaking;
 			AnyChange = true;
 			return this;
 		}
 	}
 
-	public class ApiChanges : Dictionary<string, List<ApiChange>> {
+	class ApiChanges : Dictionary<string, List<ApiChange>> {
+
+		public State State;
+
+		public ApiChanges (State state)
+		{
+			State = state;
+		}
+
 		public void Add (XElement source, XElement target, ApiChange change)
 		{
 			if (!change.AnyChange) {
@@ -68,9 +69,9 @@ namespace Xamarin.ApiDiff
 				if (!change.HasIgnoredChanges) {
 					var isField = source.Name.LocalName == "field";
 					if (isField) {
-						Console.WriteLine ("Comparison resulting in no changes (src: {2} dst: {3}) :\n{0}\n{1}\n\n", source.ToString (), target.ToString (), source.GetFieldAttributes (), target.GetFieldAttributes ());
+						State.LogDebugMessage ($"Comparison resulting in no changes (src: {source.GetFieldAttributes ()} dst: {target.GetFieldAttributes ()}) :{Environment.NewLine}{source}{Environment.NewLine}{target}{Environment.NewLine}{Environment.NewLine}");
 					} else {
-						Console.WriteLine ("Comparison resulting in no changes (src: {2} dst: {3}) :\n{0}\n{1}\n\n", source.ToString (), target.ToString (), source.GetMethodAttributes (), target.GetMethodAttributes ());
+						State.LogDebugMessage ($"Comparison resulting in no changes (src: {source.GetMethodAttributes ()} dst: {target.GetMethodAttributes ()}) :{Environment.NewLine}{source}{Environment.NewLine}{target}{Environment.NewLine}{Environment.NewLine}");
 					}
 				}
 				return;

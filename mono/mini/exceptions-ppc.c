@@ -561,10 +561,13 @@ mono_arch_unwind_frame (MonoDomain *domain, MonoJitTlsData *jit_tls,
 			for (i = MONO_PPC_FIRST_SAVED_GREG; i < MONO_MAX_IREGS; ++i)
 				regs [i] = ctx->regs [i];
 
-			mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start, 
+			gboolean success = mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start, 
 							   (guint8*)ji->code_start + ji->code_size,
 							   ip, NULL, regs, ppc_lr + 1,
 							   save_locations, MONO_MAX_IREGS, &cfa);
+
+			if (!success)
+				return FALSE;
 
 			/* we substract 4, so that the IP points into the call instruction */
 			MONO_CONTEXT_SET_IP (new_ctx, regs [ppc_lr] - 4);
@@ -615,22 +618,6 @@ mono_arch_ip_from_context (void *sigctx)
 #else
 	os_ucontext *uc = sigctx;
 	return (gpointer)UCONTEXT_REG_NIP(uc);
-#endif
-}
-
-void
-mono_ppc_set_func_into_sigctx (void *sigctx, void *func)
-{
-#ifdef MONO_CROSS_COMPILE
-	g_assert_not_reached ();
-#elif defined(PPC_USES_FUNCTION_DESCRIPTOR)
-	/* Have to set both the ip and the TOC reg */
-	os_ucontext *uc = sigctx;
-
-	UCONTEXT_REG_NIP(uc) = ((gsize*)func) [0];
-	UCONTEXT_REG_Rn (uc, 2) = ((gsize*)func)[1];
-#else
-	g_assert_not_reached ();
 #endif
 }
 
@@ -808,9 +795,21 @@ void
 mono_arch_setup_async_callback (MonoContext *ctx, void (*async_cb)(void *fun), gpointer user_data)
 {
 	uintptr_t sp = (uintptr_t) MONO_CONTEXT_GET_SP(ctx);
+	ctx->regs [PPC_FIRST_ARG_REG] = user_data;
 	sp -= PPC_MINIMAL_STACK_SIZE;
 	*(unsigned long *)sp = MONO_CONTEXT_GET_SP(ctx);
 	MONO_CONTEXT_SET_BP(ctx, sp);
-	MONO_CONTEXT_SET_IP(ctx, (unsigned long) async_cb);
+	mono_arch_setup_resume_sighandler_ctx(ctx, (unsigned long) async_cb);
 }
 
+void
+mono_arch_setup_resume_sighandler_ctx (MonoContext *ctx, gpointer func)
+{
+#ifdef PPC_USES_FUNCTION_DESCRIPTOR
+	MonoPPCFunctionDescriptor *handler_ftnptr = (MonoPPCFunctionDescriptor*)func;
+	MONO_CONTEXT_SET_IP(ctx, (gulong)handler_ftnptr->code);
+	ctx->regs[2] = (gulong)handler_ftnptr->toc;
+#else
+	MONO_CONTEXT_SET_IP(ctx, (unsigned long) func);
+#endif
+}

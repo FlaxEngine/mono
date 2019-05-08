@@ -43,8 +43,8 @@ static const struct msgstr_t {
 #undef MINI_OP3
 };
 static const gint16 opidx [] = {
-#define MINI_OP(a,b,dest,src1,src2) [a - OP_LOAD] = offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
-#define MINI_OP3(a,b,dest,src1,src2,src3) [a - OP_LOAD] = offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
+#define MINI_OP(a,b,dest,src1,src2)       offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
+#define MINI_OP3(a,b,dest,src1,src2,src3) offsetof (struct msgstr_t, MSGSTRFIELD(__LINE__)),
 #include "mini-ops.h"
 #undef MINI_OP
 #undef MINI_OP3
@@ -192,9 +192,9 @@ mono_disassemble_code (MonoCompile *cfg, guint8 *code, int size, char *id)
 			}
 		}
 		if (cindex == 0) {
-			fprintf (ofd, "\n.byte %d", (unsigned int) code [i]);
+			fprintf (ofd, "\n.byte %u", (unsigned int) code [i]);
 		} else {
-			fprintf (ofd, ",%d", (unsigned int) code [i]);
+			fprintf (ofd, ",%u", (unsigned int) code [i]);
 		}
 		cindex++;
 		if (cindex == 64)

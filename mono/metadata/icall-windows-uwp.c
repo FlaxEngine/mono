@@ -12,14 +12,18 @@
 #if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/metadata/icall-windows-internals.h"
+#include "mono/metadata/w32subset.h"
 
+#if !HAVE_API_SUPPORT_WIN32_GET_COMPUTER_NAME
 MonoStringHandle
 mono_icall_get_machine_name (MonoError *error)
 {
 	g_unsupported_api ("GetComputerName");
 	return mono_string_new_handle (mono_domain_get (), "mono", error);
 }
+#endif
 
+#if !HAVE_API_SUPPORT_WIN32_SH_GET_FOLDER_PATH
 MonoStringHandle
 mono_icall_get_windows_folder_path (int folder, MonoError *error)
 {
@@ -27,7 +31,9 @@ mono_icall_get_windows_folder_path (int folder, MonoError *error)
 	g_unsupported_api ("SHGetFolderPath");
 	return mono_string_new_handle (mono_domain_get (), "", error);
 }
+#endif
 
+#if !HAVE_API_SUPPORT_WIN32_GET_LOGICAL_DRIVE_STRINGS
 MonoArray *
 mono_icall_get_logical_drives (void)
 {
@@ -43,7 +49,9 @@ mono_icall_get_logical_drives (void)
 
 	return NULL;
 }
+#endif
 
+#if !HAVE_API_SUPPORT_WIN32_SEND_MESSAGE_TIMEOUT
 MonoBoolean
 mono_icall_broadcast_setting_change (MonoError *error)
 {
@@ -57,7 +65,9 @@ mono_icall_broadcast_setting_change (MonoError *error)
 
 	return is_ok (error);
 }
+#endif
 
+#if !HAVE_API_SUPPORT_WIN32_GET_DRIVE_TYPE
 guint32
 mono_icall_drive_info_get_drive_type (MonoString *root_path_name)
 {
@@ -71,7 +81,9 @@ mono_icall_drive_info_get_drive_type (MonoString *root_path_name)
 
 	return DRIVE_UNKNOWN;
 }
+#endif
 
+#if !HAVE_API_SUPPORT_WIN32_WAIT_FOR_INPUT_IDLE
 gint32
 mono_icall_wait_for_input_idle (gpointer handle, gint32 milliseconds)
 {
@@ -85,8 +97,9 @@ mono_icall_wait_for_input_idle (gpointer handle, gint32 milliseconds)
 
 	return WAIT_TIMEOUT;
 }
+#endif
 
-#else /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */
+#else  /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE */
 
 MONO_EMPTY_SOURCE_FILE (icall_windows_uwp);
-#endif /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */
+#endif  /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE */

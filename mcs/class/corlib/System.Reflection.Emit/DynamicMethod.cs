@@ -172,7 +172,7 @@ namespace System.Reflection.Emit {
 
 			CreateDynMethod ();
 
-			deleg = Delegate.CreateDelegate (delegateType, this);
+			deleg = Delegate.CreateDelegate (delegateType, null, this);
 			return deleg;
 		}
 
@@ -264,7 +264,7 @@ namespace System.Reflection.Emit {
 
 			ParameterInfo[] retval = new ParameterInfo [parameters.Length];
 			for (int i = 0; i < parameters.Length; i++) {
-				retval [i] = ParameterInfo.New (pinfo == null ? null : pinfo [i + 1], parameters [i], this, i + 1);
+				retval [i] = MonoParameterInfo.New (pinfo?[i + 1], parameters [i], this, i + 1);
 			}
 			return retval;
 		}
@@ -296,7 +296,7 @@ namespace System.Reflection.Emit {
 				if (method == null)
 					method = new MonoMethod (mhandle);
 
-				return method.Invoke (obj, parameters);
+				return method.Invoke (obj, invokeAttr, binder, parameters, culture);
 			}
 			catch (MethodAccessException mae) {
 				throw new TargetInvocationException ("Method cannot be invoked.", mae);

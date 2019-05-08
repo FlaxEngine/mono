@@ -18,8 +18,6 @@
  */
 #ifdef MONO_ARCH_GSHAREDVT_SUPPORTED
 
-#define ALIGN_TO(val,align) ((((guint64)val) + ((align) - 1)) & ~((align) - 1))
-
 void
 mono_arm_gsharedvt_init (void)
 {
@@ -107,6 +105,8 @@ get_arg_slots (ArgInfo *ainfo, int **out_slots)
 			src [i] = map_reg (sreg + i);
 		break;
 	case ArgOnStack:
+	case ArgOnStackR4:
+	case ArgOnStackR8:
 		nsrc = 1;
 		src = g_malloc (nsrc * sizeof (int));
 		src [0] = map_stack_slot (sslot);
@@ -255,7 +255,7 @@ mono_arch_get_gsharedvt_call_info (gpointer addr, MonoMethodSignature *normal_si
 		}
 		if (nsrc)
 			src [0] |= (arg_marshal << 18);
-		if (ainfo->storage == ArgOnStack && ainfo->slot_size != 8) {
+		if ((ainfo->storage == ArgOnStack || ainfo->storage == ArgOnStackR4) && ainfo->slot_size != 8) {
 			GSharedVtArgSize arg_size = GSHAREDVT_ARG_SIZE_NONE;
 
 			/*
@@ -281,7 +281,7 @@ mono_arch_get_gsharedvt_call_info (gpointer addr, MonoMethodSignature *normal_si
 			src [0] |= (arg_size << 22);
 			/* Encode the offset inside the stack slot */
 			src [0] |= ((ainfo->offset % 8) << 26);
-			if (ainfo2->storage == ArgOnStack)
+			if (ainfo2->storage == ArgOnStack || ainfo2->storage == ArgOnStackR4)
 				dst [0] |= ((ainfo2->offset % 8) << 26);
 		} else if (ainfo2->storage == ArgOnStack && ainfo2->slot_size != 8) {
 			/* The caller passes in an address, need to store it into a stack slot */

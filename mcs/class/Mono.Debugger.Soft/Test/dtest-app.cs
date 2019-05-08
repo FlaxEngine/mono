@@ -13,7 +13,9 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
+#if !MOBILE
 using MonoTests.Helpers;
+#endif
 
 public class TestsBase
 {
@@ -83,6 +85,31 @@ public class Tests2 {
 	}
 }
 
+public struct TestEnumeratorInsideGenericStruct<TKey, TValue>
+{
+	private KeyValuePair<TKey, TValue> _bucket;
+	private Position _currentPosition;
+	internal TestEnumeratorInsideGenericStruct(KeyValuePair<TKey, TValue> bucket)
+	{
+		_bucket = bucket;
+		_currentPosition = Position.BeforeFirst;
+	}
+
+	public KeyValuePair<TKey, TValue> Current
+	{
+		get
+		{
+			if (_currentPosition == Position.BeforeFirst)
+				return _bucket;
+			return _bucket;
+		}
+	}
+	private enum Position
+	{
+		BeforeFirst
+	}
+}
+
 public struct AStruct : ITest2 {
 	public int i;
 	public string s;
@@ -143,6 +170,12 @@ public struct AStruct : ITest2 {
 	public override string ToString () {
 		return i.ToString ();
 	}
+}
+
+
+public struct BlittableStruct {
+	public int i;
+	public double d;
 }
 
 public class GClass<T> {
@@ -260,6 +293,8 @@ public class Tests : TestsBase, ITest2
 	public static bool is_attached = Debugger.IsAttached;
 	public NestedStruct nested_struct;
 
+	static string arg;
+
 #pragma warning restore 0414
 
 	public class NestedClass {
@@ -293,6 +328,9 @@ public class Tests : TestsBase, ITest2
 	}
 
 	public static int Main (String[] args) {
+		if (args.Length == 0)
+			args = new String [] { Tests.arg };
+
 		tls_i = 42;
 
 		if (args.Length > 0 && args [0] == "suspend-test")
@@ -315,7 +353,11 @@ public class Tests : TestsBase, ITest2
 			return 0;
 		}
 		if (args.Length >0 && args [0] == "threadpool-io") {
+#if !MOBILE
 			threadpool_io ();
+#else
+			throw new Exception ("Can't run threadpool-io test on mobile");
+#endif
 			return 0;
 		}
 		if (args.Length > 0 && args [0] == "attach") {
@@ -344,11 +386,15 @@ public class Tests : TestsBase, ITest2
 		threads ();
 		dynamic_methods ();
 		user ();
+#if !MOBILE
 		type_load ();
+#endif
 		regress ();
 		gc_suspend ();
 		set_ip ();
 		step_filters ();
+		pointers ();
+		ref_return ();
 		if (args.Length > 0 && args [0] == "local-reflect")
 			local_reflect ();
 		if (args.Length > 0 && args [0] == "domain-test")
@@ -364,9 +410,26 @@ public class Tests : TestsBase, ITest2
 			new Tests ().invoke_abort ();
 		new Tests ().evaluate_method ();
 		Bug59649 ();
+		inspect_enumerator_in_generic_struct();
+		if_property_stepping();
 		return 3;
 	}
 
+	private class TestClass {
+		private string oneLineProperty = "";
+		public string OneLineProperty {
+			get { return oneLineProperty; }
+			set { oneLineProperty = value; }
+		}
+	}
+
+	public static void if_property_stepping() {
+		var test = new TestClass();
+		if (test.OneLineProperty == "someInvalidValue6049e709-7271-41a1-bc0a-f1f1b80d4125")
+			return;
+		Console.Write("");
+	}
+	
 	public static void local_reflect () {
 		//Breakpoint line below, and reflect someField via ObjectMirror;
 		LocalReflectClass.RunMe ();
@@ -445,6 +508,8 @@ public class Tests : TestsBase, ITest2
 		ss_fp_clobber ();
 		ss_no_frames ();
 		ss_await ();
+		ss_nested_with_three_args_wrapper();
+		ss_nested_twice_with_two_args_wrapper();
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
@@ -557,12 +622,49 @@ public class Tests : TestsBase, ITest2
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_nested_with_three_args_wrapper () {
+		ss_nested_with_three_args(ss_nested_arg1 (), ss_nested_arg2 (), ss_nested_arg3 ());
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ss_nested_twice_with_two_args_wrapper () {
+		ss_nested_with_two_args(ss_nested_arg1 (), ss_nested_with_two_args(ss_nested_arg2 (), ss_nested_arg3 ()));
+  	}
+  
+	
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void inspect_enumerator_in_generic_struct() {
+		TestEnumeratorInsideGenericStruct<String, String> generic_struct = new TestEnumeratorInsideGenericStruct<String, String>(new KeyValuePair<string, string>("0", "f1"));
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static int ss_nested_with_two_args (int a1, int a2) {
 		return a1 + a2;
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static int ss_nested_with_three_args (int a1, int a2, int a3) {
+		return a1 + a2 + a3;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static int ss_nested_arg () {
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static int ss_nested_arg1 () {
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static int ss_nested_arg2 () {
+		return 0;
+	}
+	
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static int ss_nested_arg3 () {
 		return 0;
 	}
 
@@ -1554,6 +1656,7 @@ public class Tests : TestsBase, ITest2
 		Debugger.Log (5, Debugger.IsLogging () ? "A" : "", "B");
 	}
 
+#if !MOBILE
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void type_load () {
 		type_load_2 ();
@@ -1568,6 +1671,7 @@ public class Tests : TestsBase, ITest2
 		var c2 = new TypeLoadClass2 ();
 		c2.ToString ();
 	}
+#endif
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void regress () {
@@ -1684,6 +1788,7 @@ public class Tests : TestsBase, ITest2
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void threadpool_bp () { }
 
+#if !MOBILE
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public static void threadpool_io () {
 		// Start a threadpool task that blocks on I/O.
@@ -1723,6 +1828,7 @@ public class Tests : TestsBase, ITest2
 		streamOut.Close ();
 		var bsIn = t.Result;
 	}
+#endif
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	public void attach_break () {
@@ -1760,6 +1866,39 @@ public class Tests : TestsBase, ITest2
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static void step_out_void_async_2 ()
 	{
+	}
+
+	public static unsafe void pointer_arguments (int* a, BlittableStruct* s) {
+		*a = 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static unsafe void pointers () {
+		int[] a = new [] {1,2,3};
+		BlittableStruct s = new BlittableStruct () { i = 2, d = 3.0 };
+		fixed (int* pa = a)
+			pointer_arguments (pa, &s);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void ref_return () {
+
+	}
+
+	static int ret_val = 1;
+	public static ref int get_ref_int() {
+		return ref ret_val;
+	}
+
+	static string ref_return_string = "byref";
+	public static ref string get_ref_string() {
+		return ref ref_return_string;
+	}
+
+
+	static BlittableStruct ref_return_struct = new BlittableStruct () { i = 1, d = 2.0 };
+	public static ref BlittableStruct get_ref_struct() {
+		return ref ref_return_struct;
 	}
 }
 

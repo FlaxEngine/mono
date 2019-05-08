@@ -11,6 +11,8 @@ using System;
 using System.Diagnostics;
 using System.Reflection;
 using NUnit.Framework;
+using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 
 namespace MonoTests.System.Diagnostics
 {
@@ -180,7 +182,7 @@ namespace MonoTests.System.Diagnostics
 							 frame1.GetFileLineNumber (),
 							 "Line number (1)");
 
-			Assert.AreEqual (134,
+			Assert.AreEqual (136,
 							 frame2.GetFileLineNumber (),
 							 "Line number (2)");
 
@@ -320,7 +322,7 @@ namespace MonoTests.System.Diagnostics
 							 frame1.GetFileLineNumber (),
 							 "Line number (1)");
 
-			Assert.AreEqual (270,
+			Assert.AreEqual (272,
 							 frame2.GetFileLineNumber (),
 							 "Line number (2)");
 		}
@@ -339,6 +341,84 @@ namespace MonoTests.System.Diagnostics
 			Assert.AreEqual (4,
 							 frame2.GetFileColumnNumber (),
 							 "Column number (2)");
+		}
+
+		/// <summary>
+		/// Test whether GetFrames contains the frames for nested exceptions
+		/// </summary>
+		[Test]
+		public void GetFramesAndNestedExc ()
+		{
+			try
+			{
+				throw new Exception("This is a test");
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					ExceptionDispatchInfo.Capture(e.InnerException ?? e).Throw();
+				}
+				catch (Exception ee)
+				{
+					StackTrace st = new StackTrace(ee, true);
+					StackFrame[] frames = st.GetFrames();
+
+					//Console.WriteLine("StackFrame.ToString() foreach StackFrame in Stacktrace.GetFrames():");
+					//foreach (StackFrame frame in frames)
+						//Console.WriteLine(frame);
+					//Console.WriteLine("Expecting: Main, Throw, Main");
+
+					Assert.AreEqual (3, frames.Length);
+					var wrongFrames = false;
+					Assert.AreEqual ("GetFramesAndNestedExc", frames [0].GetMethod ().Name);
+					Assert.AreEqual ("Throw", frames [1].GetMethod ().Name);
+					Assert.AreEqual ("GetFramesAndNestedExc", frames [2].GetMethod ().Name);
+				}
+			}
+		}
+
+		[Test]
+		[Category("NotWasm")]
+		[Category("MobileNotWorking")]
+		// https://github.com/mono/mono/issues/12688
+		public async Task GetFrames_AsyncCalls ()
+		{
+			await StartAsyncCalls ();
+		}
+
+		private async Task StartAsyncCalls ()
+		{
+			try
+			{
+				await AsyncMethod1 ();
+			}
+			catch (Exception exception)
+			{
+				var stackTrace = new StackTrace (exception, true);
+				Assert.AreEqual (25, stackTrace.GetFrames ().Length);
+			}
+		}
+
+		private async Task<int> AsyncMethod1 ()
+		{
+			return await AsyncMethod2 ();
+		}
+
+		private async Task<int> AsyncMethod2 ()
+		{
+			return await AsyncMethod3 ();
+		}
+
+		private async Task<int> AsyncMethod3 ()
+		{
+			return await AsyncMethod4 ();
+		}
+
+		private async Task<int> AsyncMethod4 ()
+		{
+			await Task.Delay (10);
+			throw new Exception ("Test exception thrown!");
 		}
 
 		/// <summary>

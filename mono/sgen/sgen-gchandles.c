@@ -48,11 +48,11 @@ protocol_gchandle_update (int handle_type, gpointer link, gpointer old_value, gp
 		return;
 
 	if (!old && new_)
-		binary_protocol_dislink_add (link, MONO_GC_REVEAL_POINTER (new_value, TRUE), track);
+		sgen_binary_protocol_dislink_add (link, MONO_GC_REVEAL_POINTER (new_value, TRUE), track);
 	else if (old && !new_)
-		binary_protocol_dislink_remove (link, track);
+		sgen_binary_protocol_dislink_remove (link, track);
 	else if (old && new_ && old_value != new_value)
-		binary_protocol_dislink_update (link, MONO_GC_REVEAL_POINTER (new_value, TRUE), track);
+		sgen_binary_protocol_dislink_update (link, MONO_GC_REVEAL_POINTER (new_value, TRUE), track);
 }
 
 /* Returns the new value in the slot, or NULL if the CAS failed. */
@@ -155,7 +155,7 @@ sgen_gc_handles_report_roots (SgenUserReportRootFunc report_func, void *gc_data)
 		revealed = MONO_GC_REVEAL_POINTER (hidden, FALSE);
 
 		if (MONO_GC_HANDLE_IS_OBJECT_POINTER (hidden))
-			report_func ((void*)slot, revealed, gc_data);
+			report_func ((void*)slot, (GCObject*)revealed, gc_data);
 	} SGEN_ARRAY_LIST_END_FOREACH_SLOT;
 }
 
@@ -186,7 +186,7 @@ alloc_handle (HandleData *handles, GCObject *obj, gboolean track)
 	/* Ensure that a GC handle cannot be given to another thread without the slot having been set. */
 	mono_memory_write_barrier ();
 	res = MONO_GC_HANDLE (index, handles->type);
-	sgen_client_gchandle_created (handles->type, obj, res);
+	sgen_client_gchandle_created ((GCHandleType)handles->type, obj, res);
 	return res;
 }
 
@@ -365,6 +365,9 @@ sgen_gchandle_get_metadata (guint32 gchandle)
 void
 sgen_gchandle_free (guint32 gchandle)
 {
+	if (!gchandle)
+		return;
+
 	guint32 index = MONO_GC_HANDLE_SLOT (gchandle);
 	GCHandleType type = MONO_GC_HANDLE_TYPE (gchandle);
 	HandleData *handles = gc_handles_for_type (type);
@@ -383,7 +386,7 @@ sgen_gchandle_free (guint32 gchandle)
 	} else {
 		/* print a warning? */
 	}
-	sgen_client_gchandle_destroyed (handles->type, gchandle);
+	sgen_client_gchandle_destroyed ((GCHandleType)handles->type, gchandle);
 }
 
 /*
@@ -406,7 +409,7 @@ null_link_if_necessary (gpointer hidden, GCHandleType handle_type, int max_gener
 	if (object_older_than (obj, max_generation))
 		return hidden;
 
-	if (major_collector.is_object_live (obj))
+	if (sgen_major_collector.is_object_live (obj))
 		return hidden;
 
 	/* Clear link if object is ready for finalization. This check may be redundant wrt is_object_live(). */

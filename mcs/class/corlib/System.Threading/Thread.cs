@@ -71,7 +71,7 @@ namespace System.Threading {
 		internal int _serialized_principal_version;
 		private IntPtr appdomain_refs;
 		private int interruption_requested;
-		private IntPtr synch_cs;
+		private IntPtr longlived;
 		internal bool threadpool_thread;
 		private bool thread_interrupt_requested;
 		/* These are used from managed code */
@@ -245,6 +245,10 @@ namespace System.Threading {
 			get {
 				Thread th = CurrentThread;
 
+				var logicalPrincipal = th.GetExecutionContextReader().LogicalCallContext.Principal;
+				if (logicalPrincipal != null)
+					return logicalPrincipal;
+
 				if (th.principal_version != th.Internal._serialized_principal_version)
 					th.principal = null;
 
@@ -265,6 +269,8 @@ namespace System.Threading {
 			[SecurityPermission (SecurityAction.Demand, ControlPrincipal = true)]
 			set {
 				Thread th = CurrentThread;
+
+				th.GetMutableExecutionContext().LogicalCallContext.Principal = value;
 
 				if (value != GetDomain ().DefaultPrincipal) {
 					++th.Internal._serialized_principal_version;

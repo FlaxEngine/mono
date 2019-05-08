@@ -2264,6 +2264,7 @@ HAS_VALUE:	ldc.i4.1
 		ret
 	}
 
+/*	   Disabled until they can be fixed to run on amd64
 	.method public static float32 GetFloat32() cil managed noinlining
 	{
 		.maxstack  8
@@ -2271,7 +2272,6 @@ HAS_VALUE:	ldc.i4.1
 		ret
 	}
 
-/*	   Disabled until they can be fixed to run on amd64
 	.method public static default int32 test_0_implicit_float_to_double_conversion () cil managed
 	{
 		.maxstack 16
@@ -2606,7 +2606,6 @@ END:
 
 	.method public static default int32 test_0_wrap_non_exception_throws () cil managed
 	{
-	  .custom instance void [TestDriver]CategoryAttribute::.ctor(string) = ( 01 00 0C 21 49 4E 54 45 52 50 52 45 54 45 52 00 00 )   // ...!INTERPRETER.
 	  .try {
 	  	    newobj instance void class [mscorlib]System.Object::'.ctor'()
 			throw
@@ -3159,6 +3158,7 @@ L_3:
 	{
 	    .custom instance void [TestDriver]CategoryAttribute::.ctor(string) = ( 01 00 0C 21 49 4E 54 45 52 50 52 45 54 45 52 00 00 )   // ...!INTERPRETER.
 		.custom instance void class [TestDriver]CategoryAttribute::'.ctor'(string) =  (01 00 08 21 46 55 4C 4C 41 4F 54 00 00 ) // ...!FULLAOT..
+		.custom instance void [TestDriver]CategoryAttribute::.ctor(string) = ( 01 00 08 21 42 49 54 43 4F 44 45 00 00 ) // ...!BITCODE..
 		.maxstack 16
 
 		.try {
@@ -3178,9 +3178,23 @@ L_3:
 			ret
 	}
 
+  .method public hidebysig static int32 test_1_box_r8_r4_autoconv () cil managed
+  {
+		ldc.r8 1.234
+		box float64
+		unbox float64
+		ldind.r8
+		box float32
+		unbox float32
+		ldind.r4
+		conv.r8
+		conv.i4
+		ret
+	}
+
 	.method public hidebysig static int32 test_1_dont_verify_ptr_byrefs () cil managed
 	 {
-		.locals init (int32 v_0, int32 *& v_2, int32 *v_1)
+		.locals init (int32 v_0, int32 *& v_1, int32 *v_2)
 
 		//v_0 = 1
 		ldc.i4.1

@@ -312,7 +312,7 @@ mono_arch_get_throw_exception_generic (int size, MonoTrampInfo **info,
 	s390_lgr  (code, s390_r3, s390_r2);
 	if (corlib) {
 		S390_SET  (code, s390_r1, (guint8 *)mono_exception_from_token);
-		S390_SET  (code, s390_r2, (guint8 *)mono_defaults.exception_class->image);
+		S390_SET  (code, s390_r2, (guint8 *)m_class_get_image (mono_defaults.exception_class));
 		s390_basr (code, s390_r14, s390_r1);
 	}
 
@@ -486,10 +486,14 @@ mono_arch_unwind_frame (MonoDomain *domain, MonoJitTlsData *jit_tls,
 		address = (char *)ip - (char *)ji->code_start;
 
 		memcpy(&regs, &ctx->uc_mcontext.gregs, sizeof(regs));
-		mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start,
+		gboolean success = mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start,
 						   (guint8 *) ji->code_start + ji->code_size,
 						   ip, NULL, regs, 16, save_locations,
 						   MONO_MAX_IREGS, &cfa);
+
+		if (!success)
+			return FALSE;
+
 		memcpy (&new_ctx->uc_mcontext.gregs, &regs, sizeof(regs));
 		MONO_CONTEXT_SET_IP(new_ctx, regs[14] - 2);
 		MONO_CONTEXT_SET_BP(new_ctx, cfa);

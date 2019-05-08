@@ -68,7 +68,7 @@ get_pe_debug_guid (MonoImage *image, guint8 *out_guid, gint32 *out_age, gint32 *
 	MonoPEDirEntry *debug_dir_entry;
 	ImageDebugDirectory *debug_dir;
 
-	debug_dir_entry = &((MonoCLIImageInfo*)image->image_info)->cli_header.datadir.pe_debug;
+	debug_dir_entry = &image->image_info->cli_header.datadir.pe_debug;
 	if (!debug_dir_entry->size)
 		return FALSE;
 
@@ -370,9 +370,16 @@ mono_ppdb_lookup_location (MonoDebugMethodInfo *minfo, uint32_t offset)
 	location = g_new0 (MonoDebugSourceLocation, 1);
 	location->source_file = docname;
 	location->row = start_line;
+	location->column = start_col;
 	location->il_offset = iloffset;
 
 	return location;
+}
+
+MonoImage *
+mono_ppdb_get_image (MonoPPDBFile *ppdb)
+{
+    return  ppdb->image;
 }
 
 void
@@ -414,7 +421,14 @@ mono_ppdb_get_seq_points (MonoDebugMethodInfo *minfo, char **source_file, GPtrAr
 
 	method_idx = mono_metadata_token_index (method->token);
 
-	mono_metadata_decode_row (&tables [MONO_TABLE_METHODBODY], method_idx-1, cols, MONO_METHODBODY_SIZE);
+	MonoTableInfo *methodbody_table = &tables [MONO_TABLE_METHODBODY];
+	if (G_UNLIKELY (method_idx - 1 >= methodbody_table->rows)) {
+		char *method_name = mono_method_full_name (method, FALSE);
+		g_error ("Method idx %d is greater than number of rows (%d) in PPDB MethodDebugInformation table, for method %s in '%s'. Likely a malformed PDB file.",
+			   method_idx - 1, methodbody_table->rows, method_name, image->name);
+		g_free (method_name);
+	}
+	mono_metadata_decode_row (methodbody_table, method_idx - 1, cols, MONO_METHODBODY_SIZE);
 
 	docidx = cols [MONO_METHODBODY_DOCUMENT];
 

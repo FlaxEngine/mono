@@ -133,7 +133,7 @@ sgen_card_table_wbarrier_generic_nostore (gpointer ptr)
 }
 
 static void
-sgen_card_table_wbarrier_range_copy (gpointer _dest, gpointer _src, int size)
+sgen_card_table_wbarrier_range_copy (gpointer _dest, gconstpointer _src, int size)
 {
 	GCObject **dest = (GCObject **)_dest;
 	GCObject **src = (GCObject **)_src;
@@ -152,7 +152,7 @@ sgen_card_table_wbarrier_range_copy (gpointer _dest, gpointer _src, int size)
 	while (size) {
 		GCObject *value = *src;
 		*dest = value;
-		if (SGEN_PTR_IN_NURSERY (value, nursery_bits, start, end) || concurrent_collection_in_progress) {
+		if (SGEN_PTR_IN_NURSERY (value, nursery_bits, start, end) || sgen_concurrent_collection_in_progress) {
 			*card_address = 1;
 			sgen_dummy_use (value);
 		}
@@ -474,6 +474,26 @@ sgen_get_card_table_configuration (int *shift_bits, gpointer *mask)
 #endif
 }
 
+guint8*
+sgen_get_target_card_table_configuration (int *shift_bits, target_mgreg_t *mask)
+{
+#ifndef MANAGED_WBARRIER
+	return NULL;
+#else
+	if (!sgen_cardtable)
+		return NULL;
+
+	*shift_bits = CARD_BITS;
+#ifdef SGEN_TARGET_HAVE_OVERLAPPING_CARDS
+	*mask = CARD_MASK;
+#else
+	*mask = 0;
+#endif
+
+	return sgen_cardtable;
+#endif
+}
+
 #if 0
 void
 sgen_card_table_dump_obj_card (GCObject *object, size_t size, void *dummy)
@@ -571,7 +591,7 @@ sgen_cardtable_scan_object (GCObject *obj, mword block_obj_size, guint8 *cards, 
 		ctx.ops->scan_object (obj, sgen_obj_get_descriptor (obj), ctx.queue);
 	}
 
-	binary_protocol_card_scan (obj, sgen_safe_object_get_size (obj));
+	sgen_binary_protocol_card_scan (obj, sgen_safe_object_get_size (obj));
 }
 
 void

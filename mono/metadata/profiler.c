@@ -25,14 +25,13 @@ typedef void (*MonoProfilerInitializer) (const char *);
 static gboolean
 load_profiler (MonoDl *module, const char *name, const char *desc)
 {
-	if (!module)
-		return FALSE;
+	g_assert (module);
 
 	char *err, *old_name = g_strdup_printf (OLD_INITIALIZER_NAME);
 	MonoProfilerInitializer func;
 
-	if (!(err = mono_dl_symbol (module, old_name, (gpointer) &func))) {
-		mono_profiler_printf_err ("Found old-style startup symbol '%s' for the '%s' profiler; it has not been migrated to the new API.", old_name, name);
+	if (!(err = mono_dl_symbol (module, old_name, (gpointer*) &func))) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_PROFILER, "Found old-style startup symbol '%s' for the '%s' profiler; it has not been migrated to the new API.", old_name, name);
 		g_free (old_name);
 		return FALSE;
 	}
@@ -71,7 +70,7 @@ load_profiler_from_executable (const char *name, const char *desc)
 	MonoDl *module = mono_dl_open (NULL, MONO_DL_EAGER, &err);
 
 	if (!module) {
-		mono_profiler_printf_err ("Could not open main executable: %s", err);
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_PROFILER, "Could not open main executable: %s", err);
 		g_free (err);
 		return FALSE;
 	}
@@ -82,17 +81,22 @@ load_profiler_from_executable (const char *name, const char *desc)
 static gboolean
 load_profiler_from_directory (const char *directory, const char *libname, const char *name, const char *desc)
 {
-	char* path;
+	char *path, *err;
 	void *iter = NULL;
 
 	while ((path = mono_dl_build_path (directory, libname, &iter))) {
-		// See the comment in load_embedded_profiler ().
-		MonoDl *module = mono_dl_open (path, MONO_DL_EAGER, NULL);
+		MonoDl *module = mono_dl_open (path, MONO_DL_EAGER, &err);
+
+		if (!module) {
+			mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_PROFILER, "Could not open from directory \"%s\": %s", path, err);
+			g_free (err);
+			g_free (path);
+			continue;
+		}
 
 		g_free (path);
 
-		if (module)
-			return load_profiler (module, name, desc);
+		return load_profiler (module, name, desc);
 	}
 
 	return FALSE;
@@ -104,12 +108,13 @@ load_profiler_from_installation (const char *libname, const char *name, const ch
 	char *err;
 	MonoDl *module = mono_dl_open_runtime_lib (libname, MONO_DL_EAGER, &err);
 
-	g_free (err);
+	if (!module) {
+		mono_trace (G_LOG_LEVEL_DEBUG, MONO_TRACE_PROFILER, "Could not open from installation: %s", err);
+		g_free (err);
+		return FALSE;
+	}
 
-	if (module)
-		return load_profiler (module, name, desc);
-
-	return FALSE;
+	return load_profiler (module, name, desc);
 }
 
 /**
@@ -137,35 +142,40 @@ load_profiler_from_installation (const char *libname, const char *name, const ch
 void
 mono_profiler_load (const char *desc)
 {
+	const char *col;
+	char *mname, *libname;
+
+	mname = libname = NULL;
+
 	if (!desc || !strcmp ("default", desc))
 		desc = "log:report";
 
-	const char *col = strchr (desc, ':');
-	char *mname;
-
-	if (col != NULL) {
+	if ((col = strchr (desc, ':')) != NULL) {
 		mname = (char *) g_memdup (desc, col - desc + 1);
 		mname [col - desc] = 0;
-	} else
+	} else {
 		mname = g_strdup (desc);
-
-	if (!load_profiler_from_executable (mname, desc)) {
-		char *libname = g_strdup_printf ("mono-profiler-%s", mname);
-		gboolean res = load_profiler_from_installation (libname, mname, desc);
-
-		if (!res && mono_config_get_assemblies_dir ())
-			res = load_profiler_from_directory (mono_assembly_getrootdir (), libname, mname, desc);
-
-		if (!res)
-			res = load_profiler_from_directory (NULL, libname, mname, desc);
-
-		if (!res)
-			mono_profiler_printf_err ("The '%s' profiler wasn't found in the main executable nor could it be loaded from '%s'.", mname, libname);
-
-		g_free (libname);
 	}
 
+	if (load_profiler_from_executable (mname, desc))
+		goto done;
+
+	libname = g_strdup_printf ("mono-profiler-%s", mname);
+
+	if (load_profiler_from_installation (libname, mname, desc))
+		goto done;
+
+	if (mono_config_get_assemblies_dir () && load_profiler_from_directory (mono_assembly_getrootdir (), libname, mname, desc))
+		goto done;
+
+	if (load_profiler_from_directory (NULL, libname, mname, desc))
+		goto done;
+
+	mono_trace (G_LOG_LEVEL_CRITICAL, MONO_TRACE_PROFILER, "The '%s' profiler wasn't found in the main executable nor could it be loaded from '%s'.", mname, libname);
+
+done:
 	g_free (mname);
+	g_free (libname);
 }
 
 /**
@@ -310,7 +320,7 @@ mono_profiler_get_coverage_data (MonoProfilerHandle handle, MonoMethod *method, 
 
 	coverage_lock ();
 
-	MonoProfilerCoverageInfo *info = g_hash_table_lookup (mono_profiler_state.coverage_hash, method);
+	MonoProfilerCoverageInfo *info = (MonoProfilerCoverageInfo*)g_hash_table_lookup (mono_profiler_state.coverage_hash, method);
 
 	coverage_unlock ();
 
@@ -345,14 +355,14 @@ mono_profiler_get_coverage_data (MonoProfilerHandle handle, MonoMethod *method, 
 				srcfile = sinfo->source_file;
 			}
 
-			MonoProfilerCoverageData data = {
-				.method = method,
-				.il_offset = sp->il_offset,
-				.counter = 0,
-				.file_name = srcfile,
-				.line = sp->line,
-				.column = 0,
-			};
+			MonoProfilerCoverageData data;
+			memset (&data, 0, sizeof (data));
+			data.method = method;
+			data.il_offset = sp->il_offset;
+			data.counter = 0;
+			data.file_name = srcfile;
+			data.line = sp->line;
+			data.column = 0;
 
 			cb (handle->prof, &data);
 		}
@@ -370,13 +380,13 @@ mono_profiler_get_coverage_data (MonoProfilerHandle handle, MonoMethod *method, 
 		if (cil_code && cil_code >= start && cil_code < end) {
 			guint32 offset = cil_code - start;
 
-			MonoProfilerCoverageData data = {
-				.method = method,
-				.il_offset = offset,
-				.counter = info->data [i].count,
-				.line = 1,
-				.column = 1,
-			};
+			MonoProfilerCoverageData data;
+			memset (&data, 0, sizeof (data));
+			data.method = method;
+			data.il_offset = offset;
+			data.counter = info->data [i].count;
+			data.line = 1;
+			data.column = 1;
 
 			if (minfo) {
 				MonoDebugSourceLocation *loc = mono_debug_method_lookup_location (minfo, offset);
@@ -399,6 +409,21 @@ mono_profiler_get_coverage_data (MonoProfilerHandle handle, MonoMethod *method, 
 	return TRUE;
 }
 
+gboolean
+mono_profiler_coverage_instrumentation_enabled (MonoMethod *method)
+{
+	gboolean cover = FALSE;
+
+	for (MonoProfilerHandle handle = mono_profiler_state.profilers; handle; handle = handle->next) {
+		MonoProfilerCoverageFilterCallback cb = (MonoProfilerCoverageFilterCallback)handle->coverage_filter;
+
+		if (cb)
+			cover |= cb (handle->prof, method);
+	}
+
+	return cover;
+}
+
 MonoProfilerCoverageInfo *
 mono_profiler_coverage_alloc (MonoMethod *method, guint32 entries)
 {
@@ -408,16 +433,7 @@ mono_profiler_coverage_alloc (MonoMethod *method, guint32 entries)
 	if (method->wrapper_type)
 		return FALSE;
 
-	gboolean cover = FALSE;
-
-	for (MonoProfilerHandle handle = mono_profiler_state.profilers; handle; handle = handle->next) {
-		MonoProfilerCoverageFilterCallback cb = handle->coverage_filter;
-
-		if (cb)
-			cover |= cb (handle->prof, method);
-	}
-
-	if (!cover)
+	if (!mono_profiler_coverage_instrumentation_enabled (method))
 		return NULL;
 
 	coverage_lock ();
@@ -556,13 +572,36 @@ mono_profiler_enable_allocations (void)
 }
 
 /**
+ * mono_profiler_enable_clauses:
+ *
+ * Enables instrumentation of exception clauses. This is necessary so that CIL
+ * \c leave instructions can be instrumented with a call into the profiler API.
+ * Exception clauses will not be reported unless this function is called.
+ * Returns \c TRUE if exception clause instrumentation was enabled, or \c FALSE
+ * if the function was called too late for this to be possible.
+ *
+ * This function is \b not async safe.
+ *
+ * This function may \b only be called from a profiler's init function or prior
+ * to running managed code.
+ */
+mono_bool
+mono_profiler_enable_clauses (void)
+{
+	if (mono_profiler_state.startup_done)
+		return FALSE;
+
+	return mono_profiler_state.clauses = TRUE;
+}
+
+/**
  * mono_profiler_set_call_instrumentation_filter_callback:
  *
  * Sets a call instrumentation filter function. The profiler API will invoke
  * filter functions from all installed profilers. If any of them return flags
  * other than \c MONO_PROFILER_CALL_INSTRUMENTATION_NONE, then the given method
  * will be instrumented as requested. All filters are guaranteed to be called
- * exactly once per method, even if earlier filters have already specified all
+ * at least once per method, even if earlier filters have already specified all
  * flags.
  *
  * Note that filter functions must be installed before a method is compiled in
@@ -732,13 +771,15 @@ mono_profiler_call_context_free_buffer (void *buffer)
 	mono_profiler_state.context_free_buffer (buffer);
 }
 
+G_ENUM_FUNCTIONS (MonoProfilerCallInstrumentationFlags)
+
 MonoProfilerCallInstrumentationFlags
 mono_profiler_get_call_instrumentation_flags (MonoMethod *method)
 {
 	MonoProfilerCallInstrumentationFlags flags = MONO_PROFILER_CALL_INSTRUMENTATION_NONE;
 
 	for (MonoProfilerHandle handle = mono_profiler_state.profilers; handle; handle = handle->next) {
-		MonoProfilerCallInstrumentationFilterCallback cb = handle->call_instrumentation_filter;
+		MonoProfilerCallInstrumentationFilterCallback cb = (MonoProfilerCallInstrumentationFilterCallback)handle->call_instrumentation_filter;
 
 		if (cb)
 			flags |= cb (handle->prof, method);
@@ -808,7 +849,7 @@ mono_profiler_cleanup (void)
 	MonoProfilerHandle head = mono_profiler_state.profilers;
 
 	while (head) {
-		MonoProfilerCleanupCallback cb = head->cleanup_callback;
+		MonoProfilerCleanupCallback cb = (MonoProfilerCleanupCallback)head->cleanup_callback;
 
 		if (cb)
 			cb (head->prof);
@@ -894,8 +935,9 @@ update_callback (volatile gpointer *location, gpointer new_, volatile gint32 *co
 	void \
 	mono_profiler_raise_ ## name params \
 	{ \
+		if (!mono_profiler_state.startup_done) return;	\
 		for (MonoProfilerHandle h = mono_profiler_state.profilers; h; h = h->next) { \
-			MonoProfiler ## type ## Callback cb = h->name ## _cb; \
+			MonoProfiler ## type ## Callback cb = (MonoProfiler ## type ## Callback)h->name ## _cb; \
 			if (cb) \
 				cb args; \
 		} \
@@ -1012,7 +1054,7 @@ mono_profiler_install_thread (MonoLegacyProfileThreadFunc start, MonoLegacyProfi
 }
 
 static void
-gc_event_cb (MonoProfiler *prof, MonoProfilerGCEvent event, uint32_t generation)
+gc_event_cb (MonoProfiler *prof, MonoProfilerGCEvent event, uint32_t generation, gboolean is_serial)
 {
 	prof->gc_event (prof->profiler, event, generation);
 }

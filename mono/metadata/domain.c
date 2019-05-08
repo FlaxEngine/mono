@@ -32,6 +32,7 @@
 #include <mono/metadata/object-internals.h>
 #include <mono/metadata/domain-internals.h>
 #include <mono/metadata/class-internals.h>
+#include <mono/metadata/class-init.h>
 #include <mono/metadata/debug-internals.h>
 #include <mono/metadata/assembly-internals.h>
 #include <mono/metadata/exception.h>
@@ -51,7 +52,7 @@
 
 //#define DEBUG_DOMAIN_UNLOAD 1
 
-#define GET_APPDOMAIN() ((MonoDomain*)mono_tls_get_domain ())
+#define GET_APPDOMAIN    mono_tls_get_domain
 #define SET_APPDOMAIN(x) do { \
 	MonoThreadInfo *info; \
 	mono_tls_set_domain (x); \
@@ -123,8 +124,8 @@ get_runtimes_from_exe (const char *exe_file, MonoImage **exe_image, const MonoRu
 static const MonoRuntimeInfo*
 get_runtime_by_version (const char *version);
 
-#define ALIGN_TO(val,align) ((((guint64)val) + ((align) - 1)) & ~((align) - 1))
-#define ALIGN_PTR_TO(ptr,align) (gpointer)((((gssize)(ptr)) + (align - 1)) & (~(align - 1)))
+MonoAssembly *
+mono_domain_assembly_open_internal (MonoDomain *domain, const char *name);
 
 static LockFreeMempool*
 lock_free_mempool_new (void)
@@ -257,7 +258,7 @@ mono_string_equal (MonoString *s1, MonoString *s2)
 guint
 mono_string_hash (MonoString *s)
 {
-	const guint16 *p = mono_string_chars (s);
+	const gunichar2 *p = mono_string_chars (s);
 	int i, len = mono_string_length (s);
 	guint h = 0;
 
@@ -299,16 +300,16 @@ gc_alloc_fixed_non_heap_list (size_t size)
 	if (mono_gc_is_moving ())
 		return g_malloc0 (size);
 	else
-		return mono_gc_alloc_fixed (appdomain_list_size * sizeof (void*), MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, NULL, "Domain List");
+		return mono_gc_alloc_fixed (size, MONO_GC_DESCRIPTOR_NULL, MONO_ROOT_SOURCE_DOMAIN, NULL, "Domain List");
 }
 
 static void
 gc_free_fixed_non_heap_list (void *ptr)
 {
 	if (mono_gc_is_moving ())
-		return g_free (ptr);
+		g_free (ptr);
 	else
-		return mono_gc_free_fixed (ptr);
+		mono_gc_free_fixed (ptr);
 }
 /*
  * Allocate an id for domain and set domain->domain_id.
@@ -441,8 +442,6 @@ mono_domain_create (void)
 	mono_os_mutex_init_recursive (&domain->jit_code_hash_lock);
 	mono_os_mutex_init_recursive (&domain->finalizable_objects_hash_lock);
 
-	domain->method_rgctx_hash = NULL;
-
 	mono_appdomains_lock ();
 	domain_id_alloc (domain);
 	mono_appdomains_unlock ();
@@ -478,6 +477,7 @@ mono_domain_create (void)
 static MonoDomain *
 mono_init_internal (const char *filename, const char *exe_filename, const char *runtime_version)
 {
+	ERROR_DECL (error);
 	static MonoDomain *domain = NULL;
 	MonoAssembly *ass = NULL;
 	MonoImageOpenStatus status = MONO_IMAGE_OK;
@@ -598,7 +598,7 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 		
 		exit (1);
 	}
-	mono_defaults.corlib = mono_assembly_get_image (ass);
+	mono_defaults.corlib = mono_assembly_get_image_internal (ass);
 
 	mono_defaults.object_class = mono_class_load_from_name (
                 mono_defaults.corlib, "System", "Object");
@@ -777,8 +777,9 @@ mono_init_internal (const char *filename, const char *exe_filename, const char *
 	mono_defaults.threadpool_wait_callback_class = mono_class_load_from_name (
 		mono_defaults.corlib, "System.Threading", "_ThreadPoolWaitCallback");
 
-	mono_defaults.threadpool_perform_wait_callback_method = mono_class_get_method_from_name (
-		mono_defaults.threadpool_wait_callback_class, "PerformWaitCallback", 0);
+	mono_defaults.threadpool_perform_wait_callback_method = mono_class_get_method_from_name_checked (
+		mono_defaults.threadpool_wait_callback_class, "PerformWaitCallback", 0, 0, error);
+	mono_error_assert_ok (error);
 
 	mono_defaults.console_class = mono_class_try_load_from_name (
 		mono_defaults.corlib, "System", "Console");
@@ -858,6 +859,8 @@ mono_cleanup (void)
 {
 	mono_close_exe_image ();
 
+	mono_thread_info_cleanup ();
+
 	mono_defaults.corlib = NULL;
 
 	mono_config_cleanup ();
@@ -921,6 +924,7 @@ mono_domain_unset (void)
 void
 mono_domain_set_internal_with_options (MonoDomain *domain, gboolean migrate_exception)
 {
+	MONO_REQ_GC_UNSAFE_MODE;
 	MonoInternalThread *thread;
 
 	if (mono_domain_get () == domain)
@@ -965,6 +969,7 @@ mono_domain_set_internal (MonoDomain *domain)
 void
 mono_domain_foreach (MonoDomainFunc func, gpointer user_data)
 {
+	MONO_ENTER_GC_UNSAFE;
 	int i, size;
 	MonoDomain **copy;
 
@@ -985,6 +990,7 @@ mono_domain_foreach (MonoDomainFunc func, gpointer user_data)
 	}
 
 	gc_free_fixed_non_heap_list (copy);
+	MONO_EXIT_GC_UNSAFE;
 }
 
 /* FIXME: maybe we should integrate this with mono_assembly_open? */
@@ -996,9 +1002,21 @@ mono_domain_foreach (MonoDomainFunc func, gpointer user_data)
 MonoAssembly *
 mono_domain_assembly_open (MonoDomain *domain, const char *name)
 {
+	MonoAssembly *result;
+	MONO_ENTER_GC_UNSAFE;
+	result = mono_domain_assembly_open_internal (domain, name);
+	MONO_EXIT_GC_UNSAFE;
+	return result;
+}
+
+MonoAssembly *
+mono_domain_assembly_open_internal (MonoDomain *domain, const char *name)
+{
 	MonoDomain *current;
 	MonoAssembly *ass;
 	GSList *tmp;
+
+	MONO_REQ_GC_UNSAFE_MODE;
 
 	mono_domain_assemblies_lock (domain);
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
@@ -1014,10 +1032,10 @@ mono_domain_assembly_open (MonoDomain *domain, const char *name)
 		current = mono_domain_get ();
 
 		mono_domain_set (domain, FALSE);
-		ass = mono_assembly_open_predicate (name, FALSE, FALSE, NULL, NULL, NULL);
+		ass = mono_assembly_open_predicate (name, MONO_ASMCTX_DEFAULT, NULL, NULL, NULL, NULL);
 		mono_domain_set (current, FALSE);
 	} else {
-		ass = mono_assembly_open_predicate (name, FALSE, FALSE, NULL, NULL, NULL);
+		ass = mono_assembly_open_predicate (name, MONO_ASMCTX_DEFAULT, NULL, NULL, NULL, NULL);
 	}
 
 	return ass;
@@ -1207,10 +1225,6 @@ mono_domain_free (MonoDomain *domain, gboolean force)
 
 	g_hash_table_destroy (domain->finalizable_objects_hash);
 	domain->finalizable_objects_hash = NULL;
-	if (domain->method_rgctx_hash) {
-		g_hash_table_destroy (domain->method_rgctx_hash);
-		domain->method_rgctx_hash = NULL;
-	}
 	if (domain->generic_virtual_cases) {
 		g_hash_table_destroy (domain->generic_virtual_cases);
 		domain->generic_virtual_cases = NULL;
@@ -1259,13 +1273,14 @@ mono_domain_get_by_id (gint32 domainid)
 {
 	MonoDomain * domain;
 
+	MONO_ENTER_GC_UNSAFE;
 	mono_appdomains_lock ();
 	if (domainid < appdomain_list_size)
 		domain = appdomains_list [domainid];
 	else
 		domain = NULL;
 	mono_appdomains_unlock ();
-
+	MONO_EXIT_GC_UNSAFE;
 	return domain;
 }
 
@@ -1304,7 +1319,7 @@ mono_domain_get_friendly_name (MonoDomain *domain)
  * LOCKING: Acquires the domain lock.
  */
 gpointer
-mono_domain_alloc (MonoDomain *domain, guint size)
+(mono_domain_alloc) (MonoDomain *domain, guint size)
 {
 	gpointer res;
 
@@ -1324,7 +1339,7 @@ mono_domain_alloc (MonoDomain *domain, guint size)
  * LOCKING: Acquires the domain lock.
  */
 gpointer
-mono_domain_alloc0 (MonoDomain *domain, guint size)
+(mono_domain_alloc0) (MonoDomain *domain, guint size)
 {
 	gpointer res;
 
@@ -1339,7 +1354,7 @@ mono_domain_alloc0 (MonoDomain *domain, guint size)
 }
 
 gpointer
-mono_domain_alloc0_lock_free (MonoDomain *domain, guint size)
+(mono_domain_alloc0_lock_free) (MonoDomain *domain, guint size)
 {
 	return lock_free_mempool_alloc0 (domain->lock_free_mp, size);
 }
@@ -1350,7 +1365,7 @@ mono_domain_alloc0_lock_free (MonoDomain *domain, guint size)
  * LOCKING: Acquires the domain lock.
  */
 void*
-mono_domain_code_reserve (MonoDomain *domain, int size)
+(mono_domain_code_reserve) (MonoDomain *domain, int size)
 {
 	gpointer res;
 
@@ -1367,7 +1382,7 @@ mono_domain_code_reserve (MonoDomain *domain, int size)
  * LOCKING: Acquires the domain lock.
  */
 void*
-mono_domain_code_reserve_align (MonoDomain *domain, int size, int alignment)
+(mono_domain_code_reserve_align) (MonoDomain *domain, int size, int alignment)
 {
 	gpointer res;
 
@@ -1975,7 +1990,8 @@ mono_domain_get_assemblies (MonoDomain *domain, gboolean refonly)
 	mono_domain_assemblies_lock (domain);
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
 		ass = (MonoAssembly *)tmp->data;
-		if (refonly != ass->ref_only)
+		gboolean ass_ref_only = mono_asmctx_get_kind (&ass->context) == MONO_ASMCTX_REFONLY;
+		if (refonly != ass_ref_only)
 			continue;
 		if (ass->corlib_internal)
 			continue;

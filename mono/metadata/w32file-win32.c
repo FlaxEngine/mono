@@ -11,6 +11,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include "mono/metadata/w32file-win32-internals.h"
+#include "mono/metadata/w32subset.h"
 
 void
 mono_w32file_init (void)
@@ -86,21 +87,25 @@ mono_w32file_delete (const gunichar2 *name)
 }
 
 gboolean
-mono_w32file_read(gpointer handle, gpointer buffer, guint32 numbytes, guint32 *bytesread)
+mono_w32file_read(gpointer handle, gpointer buffer, guint32 numbytes, guint32 *bytesread, gint32 *win32error)
 {
 	gboolean res;
 	MONO_ENTER_GC_SAFE;
-	res = ReadFile (handle, buffer, numbytes, bytesread, NULL);
+	res = ReadFile (handle, buffer, numbytes, (PDWORD)bytesread, NULL);
+	if (!res)
+		*win32error = GetLastError ();
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
 
 gboolean
-mono_w32file_write (gpointer handle, gconstpointer buffer, guint32 numbytes, guint32 *byteswritten)
+mono_w32file_write (gpointer handle, gconstpointer buffer, guint32 numbytes, guint32 *byteswritten, gint32 *win32error)
 {
 	gboolean res;
 	MONO_ENTER_GC_SAFE;
-	res = WriteFile (handle, buffer, numbytes, byteswritten, NULL);
+	res = WriteFile (handle, buffer, numbytes, (PDWORD)byteswritten, NULL);
+	if (!res)
+		*win32error = GetLastError ();
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
@@ -130,7 +135,7 @@ mono_w32file_seek (gpointer handle, gint32 movedistance, gint32 *highmovedistanc
 {
 	guint32 res;
 	MONO_ENTER_GC_SAFE;
-	res = SetFilePointer (handle, movedistance, highmovedistance, method);
+	res = SetFilePointer (handle, movedistance, (PLONG)highmovedistance, method);
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
@@ -374,7 +379,7 @@ mono_w32file_get_volume_information (const gunichar2 *path, gunichar2 *volumenam
 {
 	gboolean res;
 	MONO_ENTER_GC_SAFE;
-	res = GetVolumeInformation (path, volumename, volumesize, outserial, maxcomp, fsflags, fsbuffer, fsbuffersize);
+	res = GetVolumeInformation (path, volumename, volumesize, (PDWORD)outserial, (PDWORD)maxcomp, (PDWORD)fsflags, fsbuffer, fsbuffersize);
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
@@ -406,7 +411,9 @@ mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 
 	return result;
 }
+#endif
 
+#if HAVE_API_SUPPORT_WIN32_REPLACE_FILE
 gboolean
 mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sourceFileName, const gunichar2 *destinationBackupFileName, guint32 flags, gint32 *error)
 {
@@ -422,6 +429,18 @@ mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sou
 
 	return result;
 }
+#endif
+
+#if HAVE_API_SUPPORT_WIN32_COPY_FILE
+// Support older UWP SDK?
+WINBASEAPI
+BOOL
+WINAPI
+CopyFileW (
+	PCWSTR ExistingFileName,
+	PCWSTR NewFileName,
+	BOOL FailIfExists
+	);
 
 gboolean
 mono_w32file_copy (const gunichar2 *path, const gunichar2 *dest, gboolean overwrite, gint32 *error)
@@ -438,7 +457,9 @@ mono_w32file_copy (const gunichar2 *path, const gunichar2 *dest, gboolean overwr
 
 	return result;
 }
+#endif
 
+#if HAVE_API_SUPPORT_WIN32_LOCK_FILE
 gboolean
 mono_w32file_lock (gpointer handle, gint64 position, gint64 length, gint32 *error)
 {
@@ -454,7 +475,9 @@ mono_w32file_lock (gpointer handle, gint64 position, gint64 length, gint32 *erro
 
 	return result;
 }
+#endif
 
+#if HAVE_API_SUPPORT_WIN32_UNLOCK_FILE
 gboolean
 mono_w32file_unlock (gpointer handle, gint64 position, gint64 length, gint32 *error)
 {
@@ -470,7 +493,9 @@ mono_w32file_unlock (gpointer handle, gint64 position, gint64 length, gint32 *er
 
 	return result;
 }
+#endif
 
+#if HAVE_API_SUPPORT_WIN32_GET_STD_HANDLE
 HANDLE
 mono_w32file_get_console_input (void)
 {
@@ -500,25 +525,35 @@ mono_w32file_get_console_error (void)
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
+#endif // HAVE_API_SUPPORT_WIN32_GET_STD_HANDLE
 
 gint64
-mono_w32file_get_file_size (gpointer handle, gint32 *error)
+mono_w32file_get_file_size (HANDLE handle, gint32 *error)
 {
-	gint64 length;
-	guint32 length_hi;
+	LARGE_INTEGER length;
 
 	MONO_ENTER_GC_SAFE;
 
-	length = GetFileSize (handle, &length_hi);
-	if(length==INVALID_FILE_SIZE) {
+	if (!GetFileSizeEx (handle, &length)) {
 		*error=GetLastError ();
+		length.QuadPart = INVALID_FILE_SIZE;
 	}
 
 	MONO_EXIT_GC_SAFE;
-
-	return length | ((gint64)length_hi << 32);
+	return length.QuadPart;
 }
 
+#if HAVE_API_SUPPORT_WIN32_GET_DRIVE_TYPE
+// Support older UWP SDK?
+WINBASEAPI
+UINT
+WINAPI
+GetDriveTypeW (
+	PCWSTR RootPathName
+	);
+#endif
+
+#if HAVE_API_SUPPORT_WIN32_GET_LOGICAL_DRIVE_STRINGS
 gint32
 mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 {
@@ -530,6 +565,3 @@ mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 }
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
-
-// HACK: VS17 not building the included files for UWP
-#include "w32file-win32-uwp.c"

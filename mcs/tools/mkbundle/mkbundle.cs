@@ -48,8 +48,19 @@ class MakeBundle {
 	static bool keeptemp = false;
 	static bool compile_only = false;
 	static bool static_link = false;
-	static string config_file = null;
+
+	// Points to the $sysconfig/mono/4.5/machine.config, which contains System.Configuration settings
 	static string machine_config_file = null;
+
+        // By default, we automatically bundle a machine-config, use this to turn off the behavior.
+        static bool no_machine_config = false;
+
+	// Points to the $sysconfig/mono/config file, contains <dllmap> and others
+	static string config_file = null;
+
+        // By default, we automatically bundle the above config file, use this to turn off the behavior.
+	static bool no_config = false;
+	
 	static string config_dir = null;
 	static string style = "linux";
 	static bool bundled_header = false;
@@ -65,7 +76,7 @@ class MakeBundle {
 	static string fetch_target = null;
 	static bool custom_mode = true;
 	static string embedded_options = null;
-
+	
 	static string runtime = null;
 
 	static bool aot_compile = false;
@@ -92,7 +103,8 @@ class MakeBundle {
 		""
 	};
 	static string target_server = "https://download.mono-project.com/runtimes/raw/";
-	
+	static string mono_api_struct_file;
+
 	static int Main (string [] args)
 	{
 		List<string> sources = new List<string> ();
@@ -148,7 +160,7 @@ class MakeBundle {
 					return 1;
 				}
 				if (sdk_path != null || runtime != null)
-					Error ("You can only specify one of --runtime, --sdk or --cross");
+					Error ("You can only specify one of --runtime, --sdk or --cross {sdk_path}/{runtime}");
 				custom_mode = false;
 				autodeps = true;
 				cross_target = args [++i];
@@ -288,6 +300,12 @@ class MakeBundle {
 
 				if (!quiet)
 					Console.WriteLine ("WARNING:\n  Check that the machine.config file you are bundling\n  doesn't contain sensitive information specific to this machine.");
+				break;
+			case "--no-machine-config":
+                                no_machine_config = true;
+                                break;
+			case "--no-config":
+				no_config = true;
 				break;
 			case "--config-dir":
 				if (i+1 == top) {
@@ -436,6 +454,13 @@ class MakeBundle {
 				aot_compile = true;
 				static_link = true;
 				break;
+			case "--mono-api-struct-path":
+				if (i+1 == top) {
+					Console.WriteLine ("Usage: --mono-api-struct-path <path/to/file>");
+					return 1;
+				}
+				mono_api_struct_file = args [++i];
+				break;
 			default:
 				sources.Add (args [i]);
 				break;
@@ -445,7 +470,7 @@ class MakeBundle {
 		// Modern bundling starts here
 		if (!custom_mode){
 			if (runtime != null){
-				// Nothing to do here, the user has chosen to manually specify --runtime nad libraries
+				// Nothing to do here, the user has chosen to manually specify --runtime and libraries
 			} else if (sdk_path != null) {
 				VerifySdk (sdk_path);
 			} else if (cross_target == "default" || cross_target == null){
@@ -517,12 +542,28 @@ class MakeBundle {
 		if (!Directory.Exists (path))
 			Error ($"The specified SDK path does not exist: {path}");
 		runtime = Path.Combine (sdk_path, "bin", "mono");
-		if (!File.Exists (runtime))
-			Error ($"The SDK location does not contain a {path}/bin/mono runtime");
+		if (!File.Exists (runtime)){
+			if (File.Exists (runtime + ".exe"))
+				runtime += ".exe";
+			else
+				Error ($"The SDK location does not contain a {path}/bin/mono runtime");
+		}
 		lib_path = Path.Combine (path, "lib", "mono", "4.5");
 		if (!Directory.Exists (lib_path))
 			Error ($"The SDK location does not contain a {path}/lib/mono/4.5 directory");
 		link_paths.Add (lib_path);
+                if (machine_config_file == null && !no_machine_config) {
+                        machine_config_file = Path.Combine (path, "etc", "mono", "4.5", "machine.config");
+                        if (!File.Exists (machine_config_file)){
+                                Error ($"Could not locate the file machine.config file at ${machine_config_file} use --machine-config FILE or --no-machine-config");
+                        }
+                }
+                if (config_file == null && !no_config) {
+                        config_file = Path.Combine (path, "etc", "mono", "config");
+                        if (!File.Exists (config_file)){
+                                Error ($"Could not locate the file config file at ${config_file} use --config FILE or --no-config");
+                        }
+                }
 	}
 
 	static string targets_dir = Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.Personal), ".mono", "targets");
@@ -614,15 +655,28 @@ class MakeBundle {
 
 	class PackageMaker {
 		Dictionary<string, Tuple<long,int>> locations = new Dictionary<string, Tuple<long,int>> ();
-		const int align = 4096;
+		int align = 4096; // first non-Windows alignment, saving on average 30K
 		Stream package;
 		
-		public PackageMaker (string output)
+		public PackageMaker (string runtime, string output)
 		{
 			package = File.Create (output, 128*1024);
 			if (IsUnix){
 				File.SetAttributes (output, unchecked ((FileAttributes) 0x80000000));
 			}
+
+			Console.WriteLine ("Using runtime: " + runtime);
+
+			// Probe for MZ signature to decide if we are targeting Windows,
+			// so we can optimize an average of 30K away on Unix.
+			using (Stream runtimeStream = File.OpenRead (runtime)) {
+				var runtimeBuffer = new byte [2];
+				if (runtimeStream.Read (runtimeBuffer, 0, 2) == 2
+					&& runtimeBuffer [0] == (byte)'M'
+					&& runtimeBuffer [1] == (byte)'Z')
+					align = 1 << 16; // first Windows alignment
+			}
+			AddFile (runtime);
 		}
 
 		public int AddFile (string fname)
@@ -634,6 +688,7 @@ class MakeBundle {
 					Console.WriteLine ("At {0:x} with input {1}", package.Position, fileStream.Length);
 				fileStream.CopyTo (package);
 				package.Position = package.Position + (align - (package.Position % align));
+				align = 4096; // rest of alignment for all systems
 				return (int) ret;
 			}
 		}
@@ -647,14 +702,17 @@ class MakeBundle {
 
 		public void AddString (string entry, string text)
 		{
+			// FIXME Strings are over-aligned?
 			var bytes = Encoding.UTF8.GetBytes (text);
 			locations [entry] = Tuple.Create (package.Position, bytes.Length);
 			package.Write (bytes, 0, bytes.Length);
+			package.WriteByte (0);
 			package.Position = package.Position + (align - (package.Position % align));
 		}
 
 		public void AddStringPair (string entry, string key, string value)
 		{
+			// FIXME Strings are over-aligned?
 			var kbytes = Encoding.UTF8.GetBytes (key);
 			var vbytes = Encoding.UTF8.GetBytes (value);
 
@@ -744,9 +802,7 @@ class MakeBundle {
 			return false;
 		}
 		
-		var maker = new PackageMaker (output);
-		Console.WriteLine ("Using runtime: " + runtime);
-		maker.AddFile (runtime);
+		var maker = new PackageMaker (runtime, output);
 		
 		foreach (var url in files){
 			string fname = LocateFile (new Uri (url).LocalPath);
@@ -812,8 +868,6 @@ typedef struct {
 	const unsigned char *data;
 	const unsigned int size;
 } MonoBundledAssembly;
-void          mono_register_bundled_assemblies (const MonoBundledAssembly **assemblies);
-void          mono_register_config_for_assembly (const char* assembly_name, const char* config_xml);
 ");
 
 				// These values are part of the public API, so they are expected not to change
@@ -830,7 +884,22 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 					tc.WriteLine ("#include <mono/jit/jit.h>\n");
 			}
 
+			Stream template_stream;
+			if (String.IsNullOrEmpty (mono_api_struct_file)) {
+				tc.WriteLine ("#define USE_DEFAULT_MONO_API_STRUCT");
+				template_stream = typeof (MakeBundle).Assembly.GetManifestResourceStream ("bundle-mono-api.inc");
+			} else {
+				template_stream = File.OpenRead (mono_api_struct_file);
+			}
+
+			StreamReader s;
+			using (s = new StreamReader (template_stream)) {
+				tc.Write (s.ReadToEnd ());
+			}
+			template_stream.Dispose ();
+
 			if (compress) {
+				tc.WriteLine ("#define USE_COMPRESSED_ASSEMBLY\n");
 				tc.WriteLine ("typedef struct _compressed_data {");
 				tc.WriteLine ("\tMonoBundledAssembly assembly;");
 				tc.WriteLine ("\tint compressed_size;");
@@ -920,7 +989,7 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 					FileStream cf = File.OpenRead (fname + ".config");
 					if (!quiet)
 						Console.WriteLine (" config from: " + fname + ".config");
-					tc.WriteLine ("extern const unsigned char assembly_config_{0} [];", encoded);
+					tc.WriteLine ("extern const char assembly_config_{0} [];", encoded);
 					WriteSymbol (ts, "assembly_config_" + encoded, cf.Length);
 					WriteBuffer (ts, cf, buffer);
 					ts.WriteLine ();
@@ -979,15 +1048,22 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 			}
 			tc.WriteLine ("\tNULL\n};\n");
 
+			// This must go before any attempt to access `mono_api`
+			using (template_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_common.inc")) {
+				using (s = new StreamReader (template_stream)) {
+					tc.Write (s.ReadToEnd ());
+				}
+			}
 
 			// AOT baked in plus loader
 			foreach (string asm in aot_names){
 				tc.WriteLine ("\textern const void *mono_aot_module_{0}_info;", asm);
 			}
 
-			tc.WriteLine ("\nstatic void install_aot_modules (void) {\n");
+			tc.WriteLine ("\n#ifndef USE_COMPRESSED_ASSEMBLY\n");
+			tc.WriteLine ("static void install_aot_modules (void) {\n");
 			foreach (string asm in aot_names){
-				tc.WriteLine ("\tmono_aot_register_module (mono_aot_module_{0}_info);\n", asm);
+				tc.WriteLine ("\tmono_api.mono_aot_register_module (mono_aot_module_{0}_info);\n", asm);
 			}
 
 			string enum_aot_mode;
@@ -1004,9 +1080,10 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 			default:
 				throw new Exception ("Unsupported AOT mode");
 			}
-			tc.WriteLine ("\tmono_jit_set_aot_mode ({0});", enum_aot_mode);
+			tc.WriteLine ("\tmono_api.mono_jit_set_aot_mode ({0});", enum_aot_mode);
 
 			tc.WriteLine ("\n}\n");
+			tc.WriteLine ("#endif\n");
 
 
 			tc.WriteLine ("static char *image_name = \"{0}\";", prog);
@@ -1019,12 +1096,12 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 
 			tc.WriteLine ("\nstatic void install_dll_config_files (void) {\n");
 			foreach (string[] ass in config_names){
-				tc.WriteLine ("\tmono_register_config_for_assembly (\"{0}\", assembly_config_{1});\n", ass [0], ass [1]);
+				tc.WriteLine ("\tmono_api.mono_register_config_for_assembly (\"{0}\", assembly_config_{1});\n", ass [0], ass [1]);
 			}
 			if (config_file != null)
-				tc.WriteLine ("\tmono_config_parse_memory (&system_config);\n");
+				tc.WriteLine ("\tmono_api.mono_config_parse_memory (&system_config);\n");
 			if (machine_config_file != null)
-				tc.WriteLine ("\tmono_register_machine_config (&machine_config);\n");
+				tc.WriteLine ("\tmono_api.mono_register_machine_config (&machine_config);\n");
 			tc.WriteLine ("}\n");
 
 			if (config_dir != null)
@@ -1032,16 +1109,16 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 			else
 				tc.WriteLine ("static const char *config_dir = NULL;");
 
-			Stream template_stream;
 			if (compress) {
 				template_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_z.c");
 			} else {
 				template_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template.c");
 			}
 
-			StreamReader s = new StreamReader (template_stream);
-			string template = s.ReadToEnd ();
-			tc.Write (template);
+			using (s = new StreamReader (template_stream)) {
+				tc.Write (s.ReadToEnd ());
+			}
+			template_stream.Dispose ();
 
 			if (!nomain && custom_main == null) {
 				Stream template_main_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_main.c");
@@ -2463,7 +2540,15 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 	static bool Target64BitApplication ()
 	{
 		// Should probably handled the --cross and sdk parameters.
-		return Environment.Is64BitProcess;
+		string targetArchitecture = GetEnv ("VSCMD_ARG_TGT_ARCH", "");
+		if (targetArchitecture.Length != 0) {
+			if (string.Compare (targetArchitecture, "x64", StringComparison.OrdinalIgnoreCase) == 0)
+				return true;
+			else
+				return false;
+		} else {
+			return Environment.Is64BitProcess;
+		}
 	}
 
 	static string GetMonoDir ()
@@ -2558,6 +2643,13 @@ void          mono_register_config_for_assembly (const char* assembly_name, cons
 			linkerArgs.Add ("vcruntime.lib");
 			linkerArgs.Add ("msvcrt.lib");
 			linkerArgs.Add ("oldnames.lib");
+		}
+
+		if (MakeBundle.compress) {
+			if (staticLinkMono)
+				linkerArgs.Add("zlibstatic.lib");
+			else
+				linkerArgs.Add("zlib.lib");
 		}
 
 		return;

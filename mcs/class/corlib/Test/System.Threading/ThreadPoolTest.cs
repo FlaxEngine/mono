@@ -177,12 +177,17 @@ namespace MonoTests.System.Threading
 		[Test]
 		public void GetAvailableThreads ()
 		{
+			int cpuCount = Environment.ProcessorCount;
+
+			if (cpuCount > 16)
+				Assert.Inconclusive ("This test doesn't work well with a high number of processor cores.");
+
 			ManualResetEvent mre = new ManualResetEvent (false);
 			var sw = Stopwatch.StartNew ();
 			int i, workerThreads, completionPortThreads;
 
 			try {
-				Assert.IsTrue (ThreadPool.SetMaxThreads (Environment.ProcessorCount, Environment.ProcessorCount));
+				Assert.IsTrue (ThreadPool.SetMaxThreads (cpuCount, cpuCount));
 
 				while (true) {
 					ThreadPool.GetAvailableThreads (out workerThreads, out completionPortThreads);
@@ -277,9 +282,21 @@ namespace MonoTests.System.Threading
 			//Console.WriteLine ("workItems0:{0} workItems1:{1}", workItems0, workItems1);
 			//Console.WriteLine ("threads:{0}",  threads0);
 
-			Assert.AreEqual (N, workItems1 - workItems0, "#1");
+			AssertHelper.GreaterOrEqual ((int)(workItems1 - workItems0), N, "#1");
 			Assert.IsTrue (threads0 > 0, "#2");
 		}
 #endif
+
+		[Test]
+		public void SetMinThreads ()
+		{
+			int workerThreads, cpThreads;
+			int expectedWt = 64, expectedCpt = 64;
+			bool set = ThreadPool.SetMinThreads (expectedWt, expectedCpt);
+			ThreadPool.GetMinThreads (out workerThreads, out cpThreads);
+			Assert.IsTrue (set, "#1");
+			Assert.AreEqual (expectedWt, workerThreads, "#2");
+			Assert.AreEqual (expectedCpt, cpThreads, "#3");
+		}
 	}
 }

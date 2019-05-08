@@ -12,6 +12,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include "mono/metadata/icall-windows-internals.h"
+#include "mono/metadata/w32subset.h"
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <shlobj.h>
@@ -60,7 +61,7 @@ mono_icall_get_machine_name (MonoError *error)
 	len = MAX_COMPUTERNAME_LENGTH + 1;
 	buf = g_new (gunichar2, len);
 
-	result = NULL;
+	result = MONO_HANDLE_NEW (MonoString, NULL);;
 	if (GetComputerName (buf, (PDWORD) &len)) {
 		result = mono_string_new_utf16_handle (mono_domain_get (), buf, len, error);
 	} else
@@ -193,7 +194,7 @@ mono_icall_get_windows_folder_path (int folder, MonoError *error)
 	}
 	return mono_string_new_handle (mono_domain_get (), "", error);
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoBoolean
@@ -203,18 +204,20 @@ mono_icall_broadcast_setting_change (MonoError *error)
 	SendMessageTimeout (HWND_BROADCAST, WM_SETTINGCHANGE, (WPARAM)NULL, (LPARAM)L"Environment", SMTO_ABORTIFHUNG, 2000, 0);
 	return TRUE;
 }
+#endif
 
+#if HAVE_API_SUPPORT_WIN32_WAIT_FOR_INPUT_IDLE
 gint32
 mono_icall_wait_for_input_idle (gpointer handle, gint32 milliseconds)
 {
 	return WaitForInputIdle (handle, milliseconds);
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif
 
 void
-mono_icall_write_windows_debug_string (MonoString *message)
+mono_icall_write_windows_debug_string (const gunichar2 *message)
 {
-	OutputDebugString (mono_string_chars (message));
+	OutputDebugString (message);
 }
 
 #endif /* HOST_WIN32 */

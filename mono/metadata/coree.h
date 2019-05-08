@@ -25,7 +25,7 @@
 #define STATUS_INVALID_IMAGE_FORMAT 0xC000007BL
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
-STDAPI MonoFixupCorEE(HMODULE ModuleHandle);
+MONO_API HRESULT STDAPICALLTYPE MonoFixupCorEE(HMODULE ModuleHandle);
 #endif
 
 /* Defined by the linker. */
@@ -36,8 +36,7 @@ STDAPI MonoFixupCorEE(HMODULE ModuleHandle);
 #define __ImageBase _image_base__
 #endif
 #endif
-extern IMAGE_DOS_HEADER __ImageBase;
-
+G_BEGIN_DECLS extern IMAGE_DOS_HEADER __ImageBase; G_END_DECLS
 extern HMODULE coree_module_handle;
 
 HMODULE WINAPI MonoLoadImage(LPCWSTR FileName);

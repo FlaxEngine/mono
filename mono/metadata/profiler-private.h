@@ -12,6 +12,7 @@
 #include <mono/utils/mono-context.h>
 #include <mono/utils/mono-os-mutex.h>
 #include <mono/utils/mono-os-semaphore.h>
+#include <mono/metadata/icalls.h>
 
 struct _MonoProfilerDesc {
 	MonoProfilerHandle next;
@@ -59,6 +60,8 @@ typedef struct {
 	guint32 sample_freq;
 
 	gboolean allocations;
+
+	gboolean clauses;
 
 	gboolean call_contexts;
 	void (*context_enable) (void);
@@ -111,6 +114,7 @@ mono_profiler_installed (void)
 	return !!mono_profiler_state.profilers;
 }
 
+gboolean mono_profiler_coverage_instrumentation_enabled (MonoMethod *method);
 MonoProfilerCoverageInfo *mono_profiler_coverage_alloc (MonoMethod *method, guint32 entries);
 
 struct _MonoProfilerCallContext {
@@ -141,6 +145,12 @@ static inline gboolean
 mono_profiler_allocations_enabled (void)
 {
 	return mono_profiler_state.allocations;
+}
+
+static inline gboolean
+mono_profiler_clauses_enabled (void)
+{
+	return mono_profiler_state.clauses;
 }
 
 #define _MONO_PROFILER_EVENT(name, ...) \

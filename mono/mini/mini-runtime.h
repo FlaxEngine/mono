@@ -51,6 +51,11 @@ typedef struct
 	GHashTable *llvm_jit_callees;
 	/* Maps MonoMethod -> RuntimeMethod */
 	MonoInternalHashTable interp_code_hash;
+	/* Maps MonoMethod -> 	MonoMethodRuntimeGenericContext */
+	GHashTable *mrgctx_hash;
+	GHashTable *method_rgctx_hash;
+	/* Maps gpointer -> InterpMethod */
+	GHashTable *interp_method_pointer_hash;
 } MonoJitDomainInfo;
 
 #define domain_jit_info(domain) ((MonoJitDomainInfo*)((domain)->runtime_info))
@@ -68,6 +73,8 @@ typedef struct {
 	int first_filter_idx, filter_idx;
 } ResumeState;
 
+typedef void (*MonoAbortFunction)(MonoObject*);
+
 struct MonoJitTlsData {
 	gpointer          end_of_stack;
 	guint32           stack_size;
@@ -80,7 +87,7 @@ struct MonoJitTlsData {
 	guint32          stack_ovf_guard_size;
 	guint            stack_ovf_valloced : 1;
 	guint            stack_ovf_pending : 1;
-	void            (*abort_func) (MonoObject *object);
+	MonoAbortFunction abort_func;
 	/* Used to implement --debug=casts */
 	MonoClass       *class_cast_from, *class_cast_to;
 
@@ -141,19 +148,23 @@ struct MonoJitTlsData {
 #endif
 };
 
+#define MONO_LMFEXT_DEBUGGER_INVOKE 1
+#define MONO_LMFEXT_INTERP_EXIT 2
+#define MONO_LMFEXT_INTERP_EXIT_WITH_CTX 3
+
 /*
  * This structure is an extension of MonoLMF and contains extra information.
  */
 typedef struct {
 	struct MonoLMF lmf;
-	gboolean debugger_invoke;
-	gboolean interp_exit;
-	MonoContext ctx; /* if debugger_invoke is TRUE */
-	/* If interp_exit is TRUE */
-	gpointer interp_exit_data;
+	int kind;
+	MonoContext ctx; /* valid if kind == DEBUGGER_INVOKE || kind == INTERP_EXIT_WITH_CTX */
+	gpointer interp_exit_data; /* valid if kind == INTERP_EXIT || kind == INTERP_EXIT_WITH_CTX */
 } MonoLMFExt;
 
-typedef struct {
+typedef void (*MonoFtnPtrEHCallback) (guint32 gchandle);
+
+typedef struct MonoDebugOptions {
 	gboolean handle_sigint;
 	gboolean keep_delegates;
 	gboolean reverse_pinvoke_exceptions;
@@ -215,6 +226,20 @@ typedef struct {
 	 * identify the stack on some platforms
 	 */
 	gboolean disable_omit_fp;
+	/*
+	 * Make gdb output on native crashes more verbose.
+	 */
+	gboolean verbose_gdb;
+
+	// Internal testing feature.
+	gboolean test_tailcall_require;
+
+	/*
+	 * Internal testing feature
+	 * Testing feature, skip loading the Nth aot loadable method.
+	 */
+	gboolean aot_skip_set;
+	int aot_skip;
 } MonoDebugOptions;
 
 
@@ -285,7 +310,7 @@ struct MonoJumpInfo {
 	MonoJumpInfoType type;
 	union {
 		gconstpointer   target;
-#if SIZEOF_VOID_P == 8
+#if TARGET_SIZEOF_VOID_P == 8
 		gint64          offset;
 #else
 		int             offset;
@@ -317,11 +342,11 @@ extern gboolean mono_compile_aot;
 extern gboolean mono_aot_only;
 extern gboolean mono_llvm_only;
 extern MonoAotMode mono_aot_mode;
-extern MONO_API const char *mono_build_date;
+MONO_API_DATA const char *mono_build_date;
 extern gboolean mono_do_signal_chaining;
 extern gboolean mono_do_crash_chaining;
-extern MONO_API gboolean mono_use_llvm;
-extern MONO_API gboolean mono_use_interpreter;
+MONO_API_DATA gboolean mono_use_llvm;
+MONO_API_DATA gboolean mono_use_interpreter;
 extern const char* mono_interp_opts_string;
 extern gboolean mono_do_single_method_regression;
 extern guint32 mono_single_method_regression_opt;
@@ -329,7 +354,37 @@ extern MonoMethod *mono_current_single_method;
 extern GSList *mono_single_method_list;
 extern GHashTable *mono_single_method_hash;
 extern GList* mono_aot_paths;
-extern MonoDebugOptions debug_options;
+extern MonoDebugOptions mini_debug_options;
+extern GSList *mono_interp_only_classes;
+extern char *sdb_options;
+
+/*
+This struct describes what execution engine feature to use.
+This subsume, and will eventually sunset, mono_aot_only / mono_llvm_only and friends.
+The goal is to transition us to a place were we can more easily compose/describe what features we need for a given execution mode.
+
+A good feature flag is checked alone, a bad one described many things and keeps breaking some of the modes
+*/
+typedef struct {
+	/*
+	 * If true, trampolines are to be fetched from the AOT runtime instead of JIT compiled
+	 */
+	gboolean use_aot_trampolines;
+
+	/*
+	 * If true, the runtime will try to use the interpreter before looking for compiled code.
+	 */
+	gboolean force_use_interpreter;
+} MonoEEFeatures;
+
+extern MonoEEFeatures mono_ee_features;
+
+//XXX this enum *MUST extend MonoAotMode as they are consumed together.
+typedef enum {
+	/* Always execute with interp, will use JIT to produce trampolines */
+	MONO_EE_MODE_INTERP = MONO_AOT_MODE_LAST,
+} MonoEEMode;
+
 
 static inline MonoMethod*
 jinfo_get_method (MonoJitInfo *ji)
@@ -342,15 +397,25 @@ MONO_API int         mono_main                      (int argc, char* argv[]);
 MONO_API void        mono_set_defaults              (int verbose_level, guint32 opts);
 MONO_API void        mono_parse_env_options         (int *ref_argc, char **ref_argv []);
 MONO_API char       *mono_parse_options_from        (const char *options, int *ref_argc, char **ref_argv []);
+MONO_API int         mono_regression_test_step      (int verbose_level, const char *image, const char *method_name);
+
 
 void                   mono_interp_stub_init         (void);
 void                   mini_install_interp_callbacks (MonoEECallbacks *cbs);
 MonoEECallbacks*       mini_get_interp_callbacks     (void);
 
+typedef struct _MonoDebuggerCallbacks MonoDebuggerCallbacks;
+
+void                   mini_install_dbg_callbacks (MonoDebuggerCallbacks *cbs);
+MonoDebuggerCallbacks  *mini_get_dbg_callbacks (void);
+
 MonoDomain* mini_init                      (const char *filename, const char *runtime_version);
 void        mini_cleanup                   (MonoDomain *domain);
 MONO_API MonoDebugOptions *mini_get_debug_options   (void);
 MONO_API gboolean    mini_parse_debug_option (const char *option);
+
+MONO_API void
+mono_install_ftnptr_eh_callback (MonoFtnPtrEHCallback callback);
 
 void      mini_jit_init                    (void);
 void      mini_jit_cleanup                 (void);
@@ -361,12 +426,15 @@ MONO_API int       mono_parse_default_optimizations  (const char* p);
 gboolean          mono_running_on_valgrind (void);
 
 MonoLMF * mono_get_lmf                      (void);
+#define mono_get_lmf_addr mono_tls_get_lmf_addr
 MonoLMF** mono_get_lmf_addr                 (void);
 void      mono_set_lmf                      (MonoLMF *lmf);
 void      mono_push_lmf                     (MonoLMFExt *ext);
 void      mono_pop_lmf                      (MonoLMF *lmf);
+#define mono_get_jit_tls mono_tls_get_jit_tls
 MonoJitTlsData* mono_get_jit_tls            (void);
-MONO_API MonoDomain* mono_jit_thread_attach (MonoDomain *domain);
+MONO_API MONO_RT_EXTERNAL_ONLY
+MonoDomain* mono_jit_thread_attach (MonoDomain *domain);
 MONO_API void      mono_jit_set_domain      (MonoDomain *domain);
 
 gboolean  mono_method_same_domain           (MonoJitInfo *caller, MonoJitInfo *callee);
@@ -381,6 +449,9 @@ MonoJumpInfo *mono_patch_info_list_prepend  (MonoJumpInfo *list, int ip, MonoJum
 MonoJumpInfoToken* mono_jump_info_token_new (MonoMemPool *mp, MonoImage *image, guint32 token);
 MonoJumpInfoToken* mono_jump_info_token_new2 (MonoMemPool *mp, MonoImage *image, guint32 token, MonoGenericContext *context);
 gpointer  mono_resolve_patch_target         (MonoMethod *method, MonoDomain *domain, guint8 *code, MonoJumpInfo *patch_info, gboolean run_cctors, MonoError *error) MONO_LLVM_INTERNAL;
+void mini_register_jump_site                (MonoDomain *domain, MonoMethod *method, gpointer ip);
+void mini_patch_jump_sites                  (MonoDomain *domain, MonoMethod *method, gpointer addr);
+gpointer  mono_jit_search_all_backends_for_jit_info (MonoDomain *domain, MonoMethod *method, MonoJitInfo **ji);
 gpointer  mono_jit_find_compiled_method_with_jit_info (MonoDomain *domain, MonoMethod *method, MonoJitInfo **ji);
 gpointer  mono_jit_find_compiled_method     (MonoDomain *domain, MonoMethod *method);
 gpointer  mono_jit_compile_method           (MonoMethod *method, MonoError *error);
@@ -418,16 +489,41 @@ gboolean mono_jit_map_is_enabled (void);
 /*
  * Per-OS implementation functions.
  */
-void mono_runtime_install_handlers (void);
-gboolean mono_runtime_install_custom_handlers (const char *handlers);
-void mono_runtime_install_custom_handlers_usage (void);
-void mono_runtime_cleanup_handlers (void);
-void mono_runtime_setup_stat_profiler (void);
-void mono_runtime_shutdown_stat_profiler (void);
-void mono_runtime_posix_install_handlers (void);
-void mono_gdb_render_native_backtraces (pid_t crashed_pid);
+void
+mono_runtime_install_handlers (void);
 
-void mono_cross_helpers_run (void);
+gboolean
+mono_runtime_install_custom_handlers (const char *handlers);
+
+void
+mono_runtime_install_custom_handlers_usage (void);
+
+void
+mono_runtime_cleanup_handlers (void);
+
+void
+mono_runtime_setup_stat_profiler (void);
+
+void
+mono_runtime_shutdown_stat_profiler (void);
+
+void
+mono_runtime_posix_install_handlers (void);
+
+void
+mono_gdb_render_native_backtraces (pid_t crashed_pid);
+
+void
+mono_cross_helpers_run (void);
+
+void
+mono_init_native_crash_info (void);
+
+void
+mono_dump_native_crash_info (const char *signal, void *ctx, MONO_SIG_HANDLER_INFO_TYPE *info);
+
+void
+mono_post_native_crash_handler (const char *signal, void *ctx, MONO_SIG_HANDLER_INFO_TYPE *info, gboolean crash_chaining);
 
 /*
  * Signal handling
@@ -475,9 +571,12 @@ gboolean MONO_SIG_HANDLER_SIGNATURE (mono_chain_signal);
 
 #endif
 
-#ifdef TARGET_OSX
-void mini_register_sigterm_handler (void);
+//have a global view of sdb disable
+#if !defined(MONO_ARCH_SOFT_DEBUG_SUPPORTED) || defined (DISABLE_DEBUGGER_AGENT)
+#define DISABLE_SDB 1
 #endif
+
+void mini_register_sigterm_handler (void);
 
 #endif /* __MONO_MINI_RUNTIME_H__ */
 

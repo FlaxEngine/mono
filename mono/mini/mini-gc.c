@@ -96,8 +96,6 @@ typedef struct {
 	guint8 *reg_pin_bitmap;
 } MonoCompileGC;
 
-#define ALIGN_TO(val,align) ((((mgreg_t)val) + ((align) - 1)) & ~((align) - 1))
-
 #undef DEBUG
 
 #if 0
@@ -1679,7 +1677,7 @@ process_variables (MonoCompile *cfg)
 
 		/* For some reason, 'this' is byref */
 		if (sig->hasthis && ins == cfg->args [0] && !cfg->method->klass->valuetype) {
-			t = &cfg->method->klass->byval_arg;
+			t = m_class_get_byval_arg (cfg->method->klass);
 			is_this = TRUE;
 		}
 
@@ -1787,7 +1785,7 @@ process_variables (MonoCompile *cfg)
 						for (j = 0; j < numbits; ++j) {
 							if (bitmap [j / GC_BITS_PER_WORD] & ((gsize)1 << (j % GC_BITS_PER_WORD))) {
 								/* The descriptor is for the boxed object */
-								set_slot (gcfg, (pos + j - (sizeof (MonoObject) / SIZEOF_SLOT)), cindex, pin ? SLOT_PIN : SLOT_REF);
+								set_slot (gcfg, (pos + j - (MONO_ABI_SIZEOF (MonoObject) / SIZEOF_SLOT)), cindex, pin ? SLOT_PIN : SLOT_REF);
 							}
 						}
 					}
@@ -1796,7 +1794,7 @@ process_variables (MonoCompile *cfg)
 				if (cfg->verbose_level > 1) {
 					for (j = 0; j < numbits; ++j) {
 						if (bitmap [j / GC_BITS_PER_WORD] & ((gsize)1 << (j % GC_BITS_PER_WORD)))
-							printf ("\t\t%s slot at 0x%x(fp) (slot = %d)\n", pin ? "pin" : "ref", (int)(ins->inst_offset + (j * SIZEOF_SLOT)), (int)(pos + j - (sizeof (MonoObject) / SIZEOF_SLOT)));
+							printf ("\t\t%s slot at 0x%x(fp) (slot = %d)\n", pin ? "pin" : "ref", (int)(ins->inst_offset + (j * SIZEOF_SLOT)), (int)(pos + j - (MONO_ABI_SIZEOF (MonoObject) / SIZEOF_SLOT)));
 					}
 				}
 			} else {
@@ -1969,7 +1967,7 @@ process_param_area_slots (MonoCompile *cfg)
 	}
 
 	/*
-	 * We treat param area slots as being part of the callee's frame, to be able to handle tail calls which overwrite
+	 * We treat param area slots as being part of the callee's frame, to be able to handle tailcalls which overwrite
 	 * the argument area of the caller.
 	 */
 }
