@@ -232,7 +232,11 @@ mono_mprotect (void *addr, size_t length, int flags)
 		VirtualAlloc (addr, length, MEM_COMMIT, prot);
 		return 0;
 	}
+#if _XBOX_ONE && false
+	return VirtualProtectFromApp(addr, length, prot, &oldprot) == 0;
+#else
 	return VirtualProtect (addr, length, prot, &oldprot) == 0;
+#endif
 }
 
 void*

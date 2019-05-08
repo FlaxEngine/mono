@@ -9,7 +9,7 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/metadata/coree-internals.h"
 
@@ -24,7 +24,8 @@ __int32 STDMETHODCALLTYPE
 _CorExeMain(void)
 {
 	g_unsupported_api ("_CorExeMain");
-	ExitProcess (EXIT_FAILURE);
+	TerminateProcess (GetCurrentProcess(), EXIT_FAILURE);
+	while (1);
 }
 
 STDAPI
