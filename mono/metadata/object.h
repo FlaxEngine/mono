@@ -381,10 +381,15 @@ MONO_API void         mono_gchandle_free        (uint32_t gchandle);
 
 typedef void (*mono_reference_queue_callback) (void *user_data);
 typedef struct _MonoReferenceQueue MonoReferenceQueue;
+typedef mono_bool (*mono_reference_queue_remove_check) (MonoObject* obj, void *user_data);
+typedef mono_bool (*mono_reference_queue_remove2_check) (MonoObject* obj, void *queue_user_data, void *user_data);
 
 MONO_API MonoReferenceQueue* mono_gc_reference_queue_new (mono_reference_queue_callback callback);
 MONO_API void mono_gc_reference_queue_free (MonoReferenceQueue *queue);
 MONO_API mono_bool mono_gc_reference_queue_add (MonoReferenceQueue *queue, MonoObject *obj, void *user_data);
+
+MONO_API mono_bool mono_gc_reference_queue_foreach_remove(MonoReferenceQueue *queue, mono_reference_queue_remove_check func, void *user_data);
+MONO_API mono_bool mono_gc_reference_queue_foreach_remove2(MonoReferenceQueue *queue, mono_reference_queue_remove2_check func, void *user_data);
 
 #define mono_gc_reference_queue_add_handle(queue, obj, user_data) \
 	(mono_gc_reference_queue_add ((queue), MONO_HANDLE_RAW (MONO_HANDLE_CAST (MonoObject, obj)), (user_data)))

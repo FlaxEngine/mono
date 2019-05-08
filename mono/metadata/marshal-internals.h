@@ -58,10 +58,4 @@ typedef enum {
 	TYPECHECK_CACHE_ARG_POS = 2
 } MarshalTypeCheckPositions;
 
-typedef enum {
-	TYPECHECK_OBJECT_ARG_POS = 0,
-	TYPECHECK_CLASS_ARG_POS = 1,
-	TYPECHECK_CACHE_ARG_POS = 2
-} MarshalTypeCheckPositions;
-
 #endif /* __MONO_METADATA_MARSHAL_INTERNALS_H__ */
