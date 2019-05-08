@@ -212,6 +212,10 @@ mono_object_unbox	    (MonoObject *obj);
 MONO_API MONO_RT_EXTERNAL_ONLY MonoObject *
 mono_object_clone	    (MonoObject *obj);
 
+// Checks if object comes from the given assembly
+MONO_API mono_bool
+mono_object_is_from_assembly(MonoObject *obj, MonoAssembly *assembly);
+
 MONO_API MONO_RT_EXTERNAL_ONLY MonoObject *
 mono_object_isinst	    (MonoObject *obj, MonoClass *klass);
 
