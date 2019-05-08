@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.572
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EmbeddedSamples", "EmbeddedSamples", "{5FE09AA5-C3C9-45EA-A323-36A11B653CEC}"
 EndProject
@@ -306,9 +306,13 @@ Global
 		{C36612BD-22D3-4B95-85E2-7FDC4FC5D739}.Release|x64.ActiveCfg = Release|x64
 		{C36612BD-22D3-4B95-85E2-7FDC4FC5D739}.Release|x64.Build.0 = Release|x64
 		{5362490B-8516-44EE-9987-014C015A080A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{5362490B-8516-44EE-9987-014C015A080A}.Debug|Win32.Build.0 = Debug|Win32
 		{5362490B-8516-44EE-9987-014C015A080A}.Debug|x64.ActiveCfg = Debug|x64
+		{5362490B-8516-44EE-9987-014C015A080A}.Debug|x64.Build.0 = Debug|x64
 		{5362490B-8516-44EE-9987-014C015A080A}.Release|Win32.ActiveCfg = Release|Win32
+		{5362490B-8516-44EE-9987-014C015A080A}.Release|Win32.Build.0 = Release|Win32
 		{5362490B-8516-44EE-9987-014C015A080A}.Release|x64.ActiveCfg = Release|x64
+		{5362490B-8516-44EE-9987-014C015A080A}.Release|x64.Build.0 = Release|x64
 		{92AE7622-5F58-4234-9A26-9EC71876B3F4}.Debug|Win32.ActiveCfg = Debug|Win32
 		{92AE7622-5F58-4234-9A26-9EC71876B3F4}.Debug|Win32.Build.0 = Debug|Win32
 		{92AE7622-5F58-4234-9A26-9EC71876B3F4}.Debug|x64.ActiveCfg = Debug|x64
@@ -318,13 +322,21 @@ Global
 		{92AE7622-5F58-4234-9A26-9EC71876B3F4}.Release|x64.ActiveCfg = Release|x64
 		{92AE7622-5F58-4234-9A26-9EC71876B3F4}.Release|x64.Build.0 = Release|x64
 		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Debug|Win32.Build.0 = Debug|Win32
 		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Debug|x64.ActiveCfg = Debug|x64
+		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Debug|x64.Build.0 = Debug|x64
 		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Release|Win32.ActiveCfg = Release|Win32
+		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Release|Win32.Build.0 = Release|Win32
 		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Release|x64.ActiveCfg = Release|x64
+		{A9DC644B-9171-4FCD-BF21-2CC6D055FC40}.Release|x64.Build.0 = Release|x64
 		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Debug|Win32.Build.0 = Debug|Win32
 		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Debug|x64.ActiveCfg = Debug|x64
+		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Debug|x64.Build.0 = Debug|x64
 		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Release|Win32.ActiveCfg = Release|Win32
+		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Release|Win32.Build.0 = Release|Win32
 		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Release|x64.ActiveCfg = Release|x64
+		{B6E563B8-7F57-4F7F-9439-F2405D4E2522}.Release|x64.Build.0 = Release|x64
 		{C36612BD-22D3-4B95-85E2-7FDC4FC5D740}.Debug|Win32.ActiveCfg = Debug|Win32
 		{C36612BD-22D3-4B95-85E2-7FDC4FC5D740}.Debug|Win32.Build.0 = Debug|Win32
 		{C36612BD-22D3-4B95-85E2-7FDC4FC5D740}.Debug|x64.ActiveCfg = Debug|x64
@@ -374,10 +386,13 @@ Global
 		{88D2EB79-592D-45F8-B849-AE021C1D983A}.Release|x64.ActiveCfg = Release|x64
 		{88D2EB79-592D-45F8-B849-AE021C1D983A}.Release|x64.Build.0 = Release|x64
 		{675F4175-FFB1-480D-AD36-F397578844D4}.Debug|Win32.ActiveCfg = Debug|Win32
+		{675F4175-FFB1-480D-AD36-F397578844D4}.Debug|Win32.Build.0 = Debug|Win32
 		{675F4175-FFB1-480D-AD36-F397578844D4}.Debug|x64.ActiveCfg = Debug|x64
 		{675F4175-FFB1-480D-AD36-F397578844D4}.Debug|x64.Build.0 = Debug|x64
 		{675F4175-FFB1-480D-AD36-F397578844D4}.Release|Win32.ActiveCfg = Release|Win32
+		{675F4175-FFB1-480D-AD36-F397578844D4}.Release|Win32.Build.0 = Release|Win32
 		{675F4175-FFB1-480D-AD36-F397578844D4}.Release|x64.ActiveCfg = Release|x64
+		{675F4175-FFB1-480D-AD36-F397578844D4}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -418,10 +433,10 @@ Global
 		{675F4175-FFB1-480D-AD36-F397578844D4} = {DE3617B4-17A8-4E5F-A00F-BA43D956881F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		AMDCaPersistentConfig = Debug|Win32
-		AMDCaPersistentStartup = mono
-		AMDCaProjectFile = C:\Users\Owner\Development\monogit\mono\msvc\CodeAnalyst\mono.caw
 		SolutionGuid = {24C7AEB7-F77C-40C8-A6AB-50F54AFEEA93}
+		AMDCaProjectFile = C:\Users\Owner\Development\monogit\mono\msvc\CodeAnalyst\mono.caw
+		AMDCaPersistentStartup = mono
+		AMDCaPersistentConfig = Debug|Win32
 	EndGlobalSection
 	GlobalSection(DPCodeReviewSolutionGUID) = preSolution
 		DPCodeReviewSolutionGUID = {00000000-0000-0000-0000-000000000000}
