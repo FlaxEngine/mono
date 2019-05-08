@@ -565,6 +565,3 @@ mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 }
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
-
-// HACK: VS17 not building the included files for UWP
-#include "w32file-win32-uwp.c"
