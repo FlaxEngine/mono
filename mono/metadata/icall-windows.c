@@ -13,8 +13,12 @@
 #include <windows.h>
 #include "mono/metadata/icall-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <shlobj.h>
+#endif
+
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
+#pragma comment(lib, "Kernel32.lib")
 #endif
 
 void
@@ -45,7 +49,7 @@ mono_icall_module_get_hinstance (MonoReflectionModuleHandle module)
 	return (gpointer) (-1);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoStringHandle
 mono_icall_get_machine_name (MonoError *error)
 {
@@ -170,7 +174,7 @@ mono_icall_set_environment_variable (MonoString *name, MonoString *value)
 	SetEnvironmentVariable (utf16_name, utf16_value);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoStringHandle
 mono_icall_get_windows_folder_path (int folder, MonoError *error)
 {
@@ -191,7 +195,7 @@ mono_icall_get_windows_folder_path (int folder, MonoError *error)
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoBoolean
 mono_icall_broadcast_setting_change (MonoError *error)
 {
@@ -214,3 +218,6 @@ mono_icall_write_windows_debug_string (MonoString *message)
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "icall-windows-uwp.c"

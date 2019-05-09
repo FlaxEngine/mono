@@ -14,7 +14,7 @@
 #include <objbase.h>
 #include "mono/metadata/marshal-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void*
 mono_marshal_alloc_hglobal (size_t size)
 {
@@ -124,3 +124,6 @@ mono_string_to_utf8str (MonoString *s)
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "marshal-windows-uwp.c"

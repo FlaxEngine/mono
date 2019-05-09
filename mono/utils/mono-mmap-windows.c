@@ -122,7 +122,7 @@ mono_vfree (void *addr, size_t length, MonoMemAccountType type)
 	return 0;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void*
 mono_file_map (size_t length, int flags, int fd, guint64 offset, void **ret_handle)
 {
@@ -183,7 +183,11 @@ mono_mprotect (void *addr, size_t length, int flags)
 		VirtualAlloc (addr, length, MEM_COMMIT, prot);
 		return 0;
 	}
+#if _XBOX_ONE && false
+	return VirtualProtectFromApp(addr, length, prot, &oldprot) == 0;
+#else
 	return VirtualProtect (addr, length, prot, &oldprot) == 0;
+#endif
 }
 
 void*

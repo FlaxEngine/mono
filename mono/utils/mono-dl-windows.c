@@ -43,6 +43,7 @@ mono_dl_get_so_suffixes (void)
 	return suffixes;
 }
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void*
 mono_dl_open_file (const char *file, int flags)
 {
@@ -50,18 +51,14 @@ mono_dl_open_file (const char *file, int flags)
 	if (file) {
 		gunichar2* file_utf16 = g_utf8_to_utf16 (file, strlen (file), NULL, NULL, NULL);
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		guint last_sem = SetErrorMode (SEM_FAILCRITICALERRORS);
-#endif
 		guint32 last_error = 0;
 
 		hModule = LoadLibrary (file_utf16);
 		if (!hModule)
 			last_error = GetLastError ();
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		SetErrorMode (last_sem);
-#endif
 
 		g_free (file_utf16);
 
@@ -72,6 +69,7 @@ mono_dl_open_file (const char *file, int flags)
 	}
 	return hModule;
 }
+#endif
 
 void
 mono_dl_close_handle (MonoDl *module)
@@ -80,7 +78,7 @@ mono_dl_close_handle (MonoDl *module)
 		FreeLibrary (module->handle);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void*
 mono_dl_lookup_symbol_in_process (const char *symbol_name)
 {
@@ -154,7 +152,7 @@ mono_dl_convert_flags (int flags)
 	return 0;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 char*
 mono_dl_current_error_string (void)
 {

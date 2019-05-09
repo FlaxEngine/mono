@@ -9,9 +9,18 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/utils/mono-dl-windows-internals.h"
+
+void*
+mono_dl_open_file (const char *file, int flags)
+{
+	g_unsupported_api ("mono_dl_open_file");
+    SetLastError (ERROR_NOT_SUPPORTED);
+
+	return NULL;
+}
 
 void*
 mono_dl_lookup_symbol_in_process (const char *symbol_name)

@@ -15,7 +15,7 @@
 #include <windows.h>
 #include "mono/utils/mono-rand-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #ifndef PROV_INTEL_SEC
 #define PROV_INTEL_SEC		22
 #endif

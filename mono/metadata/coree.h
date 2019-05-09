@@ -24,7 +24,9 @@
 #define STATUS_SUCCESS 0x00000000L
 #define STATUS_INVALID_IMAGE_FORMAT 0xC000007BL
 
-MONO_API STDAPI MonoFixupCorEE(HMODULE ModuleHandle);
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+STDAPI MonoFixupCorEE(HMODULE ModuleHandle);
+#endif
 
 /* Defined by the linker. */
 #ifndef _MSC_VER

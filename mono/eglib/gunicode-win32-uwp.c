@@ -7,7 +7,7 @@
 #include <config.h>
 #include <glib.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #define CODESET 1
 #include <windows.h>
 
@@ -19,9 +19,9 @@ g_get_charset (G_CONST_RETURN char **charset)
 {
 	if (my_charset == NULL) {
 		static char buf [14];
-		CPINFOEXA cp_info;
+		CPINFOEXW cp_info;
 
-		GetCPInfoExA (CP_ACP, 0, &cp_info);
+		GetCPInfoExW (CP_ACP, 0, &cp_info);
 		sprintf (buf, "CP%u", cp_info.CodePage);
 		my_charset = buf;
 		is_utf8 = FALSE;

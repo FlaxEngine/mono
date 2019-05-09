@@ -51,15 +51,19 @@ void ves_icall_System_IO_MonoIO_DumpHandles (void)
 	return;
 }
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 gpointer
 mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)
 {
 	gpointer res;
 	MONO_ENTER_GC_SAFE;
-	res = CreateFile (name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
+	res = CreateFile(name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
+
+#endif
 
 gboolean
 mono_w32file_close (gpointer handle)
@@ -375,7 +379,17 @@ mono_w32file_get_volume_information (const gunichar2 *path, gunichar2 *volumenam
 	return res;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+guint32
+mono_w32file_get_drive_type(const gunichar2 *root_path_name)
+{
+	guint32 res;
+	MONO_ENTER_GC_SAFE;
+	res = GetDriveType(root_path_name);
+	MONO_EXIT_GC_SAFE;
+	return res;
+}
+
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 
 gboolean
 mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
@@ -505,16 +519,6 @@ mono_w32file_get_file_size (gpointer handle, gint32 *error)
 	return length | ((gint64)length_hi << 32);
 }
 
-guint32
-mono_w32file_get_drive_type (const gunichar2 *root_path_name)
-{
-	guint32 res;
-	MONO_ENTER_GC_SAFE;
-	res = GetDriveType (root_path_name);
-	MONO_EXIT_GC_SAFE;
-	return res;
-}
-
 gint32
 mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 {
@@ -526,3 +530,6 @@ mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 }
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+// HACK: VS17 not building the included files for UWP
+#include "w32file-win32-uwp.c"

@@ -9,9 +9,23 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/metadata/w32file-win32-internals.h"
+
+gpointer
+mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)
+{
+	gpointer res;
+	MONO_ENTER_GC_SAFE;
+	CREATEFILE2_EXTENDED_PARAMETERS param = { 0 };
+	param.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+	param.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+	param.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+	res = CreateFile2(name, (DWORD)fileaccess, (DWORD)sharemode, (DWORD)createmode, &param);
+	MONO_EXIT_GC_SAFE;
+	return res;
+}
 
 gboolean
 mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
@@ -84,10 +98,12 @@ gboolean
 mono_w32file_lock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
 {
 	gboolean result = FALSE;
+	OVERLAPPED overlapped = { 0 };
+	overlapped.Offset = position & 0xFFFFFFFF;
+	overlapped.OffsetHigh = position >> 32;
 	MONO_ENTER_GC_SAFE;
 
-	result = LockFile (handle, position & 0xFFFFFFFF, position >> 32,
-			   length & 0xFFFFFFFF, length >> 32);
+	result = LockFileEx(handle, 0, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
 
 	if (result == FALSE) {
 		*error = GetLastError ();
@@ -101,10 +117,12 @@ gboolean
 mono_w32file_unlock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
 {
 	gboolean result = FALSE;
+	OVERLAPPED overlapped = { 0 };
+	overlapped.Offset = position & 0xFFFFFFFF;
+	overlapped.OffsetHigh = position >> 32;
 	MONO_ENTER_GC_SAFE;
 
-	result = UnlockFile (handle, position & 0xFFFFFFFF, position >> 32,
-			     length & 0xFFFFFFFF, length >> 32);
+	result = UnlockFileEx(handle, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
 
 	if (result == FALSE) {
 		*error = GetLastError ();
@@ -158,6 +176,22 @@ mono_w32file_get_console_error (void)
 	mono_error_set_pending_exception (&mono_error);
 
 	SetLastError (ERROR_NOT_SUPPORTED);
+
+	return INVALID_HANDLE_VALUE;
+}
+
+gint32
+mono_w32file_get_logical_drive(guint32 len, gunichar2 *buf)
+{
+	MonoError mono_error;
+	error_init(&mono_error);
+
+	g_unsupported_api("GetLogicalDriveStrings (len, buf)");
+
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetLogicalDriveStrings (len, buf)");
+	mono_error_set_pending_exception(&mono_error);
+
+	SetLastError(ERROR_NOT_SUPPORTED);
 
 	return INVALID_HANDLE_VALUE;
 }
