@@ -20,6 +20,18 @@
 
 static void *malloced_shared_area;
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#define VIRTUAL_ALLOC_IMPL(addr, length, mflags, prot) VirtualAlloc (addr, length, mflags, prot)
+#define VIRTUAL_FREE_IMPL(addr, length, mflags) VirtualFree (addr, length, mflags)
+#define VIRTUAL_PROTECT_IMPL(addr, length, prot, oldprot) VirtualProtect (addr, length, prot, oldprot)
+#elif G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#define VIRTUAL_ALLOC_IMPL(addr, length, mflags, prot) VirtualAllocFromApp (addr, length, mflags, prot)
+#define VIRTUAL_FREE_IMPL(addr, length, mflags) VirtualFree (addr, length, mflags)
+#define VIRTUAL_PROTECT_IMPL(addr, length, prot, oldprot) VirtualProtectFromApp (addr, length, prot, oldprot)
+#else
+#error unknown Windows variant
+#endif
+
 int
 mono_pagesize (void)
 {
@@ -74,7 +86,7 @@ mono_valloc (void *addr, size_t length, int flags, MonoMemAccountType type)
 	int prot = mono_mmap_win_prot_from_flags (flags);
 	/* translate the flags */
 
-	ptr = VirtualAlloc (addr, length, mflags, prot);
+	ptr = VIRTUAL_ALLOC_IMPL (addr, length, mflags, prot);
 
 	mono_account_mem (type, (ssize_t)length);
 
@@ -85,7 +97,7 @@ void*
 mono_valloc_aligned (size_t length, size_t alignment, int flags, MonoMemAccountType type)
 {
 	int prot = mono_mmap_win_prot_from_flags (flags);
-	char *mem = (char*)VirtualAlloc (NULL, length + alignment, MEM_RESERVE, prot);
+	char *mem = (char*)VIRTUAL_ALLOC_IMPL (NULL, length + alignment, MEM_RESERVE, prot);
 	char *aligned;
 
 	if (!mem)
@@ -96,7 +108,7 @@ mono_valloc_aligned (size_t length, size_t alignment, int flags, MonoMemAccountT
 
 	aligned = mono_aligned_address (mem, length, alignment);
 
-	aligned = (char*)VirtualAlloc (aligned, length, MEM_COMMIT, prot);
+	aligned = (char*)VIRTUAL_ALLOC_IMPL (aligned, length, MEM_COMMIT, prot);
 	g_assert (aligned);
 
 	mono_account_mem (type, (ssize_t)length);
@@ -113,7 +125,7 @@ mono_vfree (void *addr, size_t length, MonoMemAccountType type)
 
 	g_assert (query_result);
 
-	res = VirtualFree (mbi.AllocationBase, 0, MEM_RELEASE);
+	res = VIRTUAL_FREE_IMPL (mbi.AllocationBase, 0, MEM_RELEASE);
 
 	g_assert (res);
 
@@ -121,8 +133,6 @@ mono_vfree (void *addr, size_t length, MonoMemAccountType type)
 
 	return 0;
 }
-
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 
 static void
 remove_trailing_whitespace_utf16 (wchar_t *s)
@@ -219,8 +229,6 @@ mono_file_unmap (void *addr, void *handle)
 	return 0;
 }
 
-#endif // G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
-
 int
 mono_mprotect (void *addr, size_t length, int flags)
 {
@@ -228,15 +236,11 @@ mono_mprotect (void *addr, size_t length, int flags)
 	int prot = mono_mmap_win_prot_from_flags (flags);
 
 	if (flags & MONO_MMAP_DISCARD) {
-		VirtualFree (addr, length, MEM_DECOMMIT);
-		VirtualAlloc (addr, length, MEM_COMMIT, prot);
+		VIRTUAL_FREE_IMPL (addr, length, MEM_DECOMMIT);
+		VIRTUAL_ALLOC_IMPL (addr, length, MEM_COMMIT, prot);
 		return 0;
 	}
-#if _XBOX_ONE && false
-	return VirtualProtectFromApp(addr, length, prot, &oldprot) == 0;
-#else
-	return VirtualProtect (addr, length, prot, &oldprot) == 0;
-#endif
+	return VIRTUAL_PROTECT_IMPL (addr, length, prot, &oldprot) == 0;
 }
 
 void*
