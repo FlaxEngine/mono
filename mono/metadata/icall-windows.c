@@ -50,7 +50,6 @@ mono_icall_module_get_hinstance (MonoReflectionModuleHandle module)
 	return (gpointer) (-1);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoStringHandle
 mono_icall_get_machine_name (MonoError *error)
 {
@@ -70,7 +69,6 @@ mono_icall_get_machine_name (MonoError *error)
 	g_free (buf);
 	return result;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 int
 mono_icall_get_platform (void)
