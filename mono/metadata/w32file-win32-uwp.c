@@ -42,95 +42,6 @@ mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 	return result;
 }
 
-gboolean
-mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sourceFileName, const gunichar2 *destinationBackupFileName, guint32 flags, gint32 *error)
-{
-	gboolean result = FALSE;
-	MONO_ENTER_GC_SAFE;
-
-	result = ReplaceFile (destinationFileName, sourceFileName, destinationBackupFileName, flags, NULL, NULL);
-	if (result == FALSE) {
-		*error=GetLastError ();
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return result;
-}
-
-gboolean
-mono_w32file_copy (const gunichar2 *path, const gunichar2 *dest, gboolean overwrite, gint32 *error)
-{
-	gboolean						result = FALSE;
-	COPYFILE2_EXTENDED_PARAMETERS	copy_param = {0};
-
-	copy_param.dwSize = sizeof (COPYFILE2_EXTENDED_PARAMETERS);
-	copy_param.dwCopyFlags = (!overwrite) ? COPY_FILE_FAIL_IF_EXISTS : 0;
-
-	MONO_ENTER_GC_SAFE;
-
-	result = SUCCEEDED (CopyFile2 (path, dest, &copy_param));
-	if (result == FALSE) {
-		*error=GetLastError ();
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return result;
-}
-
-gint64
-mono_w32file_get_file_size (HANDLE handle, gint32 *error)
-{
-	LARGE_INTEGER length;
-
-	MONO_ENTER_GC_SAFE;
-
-	if (!GetFileSizeEx (handle, &length)) {
-		*error=GetLastError ();
-		length.QuadPart = INVALID_FILE_SIZE;
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return length.QuadPart;
-}
-
-gboolean
-mono_w32file_lock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
-{
-	gboolean result = FALSE;
-	OVERLAPPED overlapped = { 0 };
-	overlapped.Offset = position & 0xFFFFFFFF;
-	overlapped.OffsetHigh = position >> 32;
-	MONO_ENTER_GC_SAFE;
-
-	result = LockFileEx(handle, 0, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
-
-	if (result == FALSE) {
-		*error = GetLastError ();
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return result;
-}
-
-gboolean
-mono_w32file_unlock (HANDLE handle, gint64 position, gint64 length, gint32 *error)
-{
-	gboolean result = FALSE;
-	OVERLAPPED overlapped = { 0 };
-	overlapped.Offset = position & 0xFFFFFFFF;
-	overlapped.OffsetHigh = position >> 32;
-	MONO_ENTER_GC_SAFE;
-
-	result = UnlockFileEx(handle, 0, length & 0xFFFFFFFF, length >> 32, &overlapped);
-
-	if (result == FALSE) {
-		*error = GetLastError ();
-	}
-
-	MONO_EXIT_GC_SAFE;
-	return result;
-}
-
 HANDLE
 mono_w32file_get_console_output (void)
 {
@@ -192,7 +103,7 @@ mono_w32file_get_logical_drive(guint32 len, gunichar2 *buf)
 
 	SetLastError(ERROR_NOT_SUPPORTED);
 
-	return INVALID_HANDLE_VALUE;
+	return (gint32)INVALID_HANDLE_VALUE;
 }
 
 #else /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */
