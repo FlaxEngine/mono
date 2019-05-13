@@ -2114,7 +2114,9 @@ if (container_assm_name && !container_amodule) {
 			aot_name = g_strdup_printf ("%s/mono/aot-cache/%s/%s%s", mono_assembly_getrootdir(), MONO_ARCHITECTURE, basename, MONO_SOLIB_EXT);
 			g_free (basename);
 			sofile = mono_dl_open (aot_name, MONO_DL_LAZY, &err);
-			if (!sofile) {
+			if (sofile) {
+				found_aot_name = g_strdup (aot_name);
+			} else {
 				mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_AOT, "AOT: image '%s' not found: %s", aot_name, err);
 				g_free (err);
 			}
