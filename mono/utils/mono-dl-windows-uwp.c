@@ -13,13 +13,40 @@
 #include <windows.h>
 #include "mono/utils/mono-dl-windows-internals.h"
 
+// Hack
+WINBASEAPI
+_Ret_maybenull_
+HMODULE
+WINAPI
+LoadLibraryW(
+    _In_ LPCWSTR lpLibFileName
+    );
+
 void*
 mono_dl_open_file (const char *file, int flags)
 {
-	g_unsupported_api ("mono_dl_open_file");
-    SetLastError (ERROR_NOT_SUPPORTED);
+	gpointer hModule = NULL;
+	if (file) {
+		gunichar2* file_utf16 = g_utf8_to_utf16 (file, strlen (file), NULL, NULL, NULL);
 
-	return NULL;
+        guint last_sem = GetLastError ();
+		guint32 last_error = 0;
+
+		//hModule = LoadPackagedLibrary (file_utf16, NULL);
+		hModule = LoadLibraryW (file_utf16);
+		if (!hModule)
+			last_error = GetLastError ();
+
+		SetErrorMode (last_sem);
+
+		g_free (file_utf16);
+
+		if (!hModule)
+			SetLastError (last_error);
+	} else {
+		g_error("Not supported");
+	}
+	return hModule;
 }
 
 void*
