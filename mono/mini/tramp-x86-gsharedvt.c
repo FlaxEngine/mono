@@ -78,6 +78,8 @@ mono_x86_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpoint
 
 }
 
+#ifndef DISABLE_JIT
+
 gpointer
 mono_arch_get_gsharedvt_trampoline (MonoTrampInfo **info, gboolean aot)
 {
@@ -357,5 +359,16 @@ mono_arch_get_gsharedvt_trampoline (MonoTrampInfo **info, gboolean aot)
 	mono_arch_flush_icache (buf, code - buf);
 	return buf;
 }
+
+#else
+
+gpointer
+mono_arch_get_gsharedvt_trampoline (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+#endif /* DISABLE_JIT */
 
 #endif /* MONO_ARCH_GSHAREDVT_SUPPORTED */

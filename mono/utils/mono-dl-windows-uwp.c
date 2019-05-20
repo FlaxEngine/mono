@@ -13,6 +13,7 @@
 #include <windows.h>
 #include "mono/utils/mono-dl-windows-internals.h"
 
+#if _WIN64
 // Hack
 WINBASEAPI
 _Ret_maybenull_
@@ -21,6 +22,7 @@ WINAPI
 LoadLibraryW(
     _In_ LPCWSTR lpLibFileName
     );
+#endif
 
 void*
 mono_dl_open_file (const char *file, int flags)
@@ -32,8 +34,11 @@ mono_dl_open_file (const char *file, int flags)
         guint last_sem = GetLastError ();
 		guint32 last_error = 0;
 
-		//hModule = LoadPackagedLibrary (file_utf16, NULL);
+#if _WIN64
 		hModule = LoadLibraryW (file_utf16);
+#else
+        hModule = LoadPackagedLibrary (file_utf16, NULL);
+#endif
 		if (!hModule)
 			last_error = GetLastError ();
 

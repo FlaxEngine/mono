@@ -871,6 +871,8 @@ mono_arch_is_int_overflow (void *sigctx, void *info)
 	return FALSE;
 }
 
+#ifndef DISABLE_JIT
+
 GList *
 mono_arch_get_allocatable_int_vars (MonoCompile *cfg)
 {
@@ -2357,6 +2359,8 @@ emit_move_return_value (MonoCompile *cfg, MonoInst *ins, guint8 *code)
 
 	return code;
 }
+
+#endif /* !DISABLE_JIT */
 
 #ifdef TARGET_MACH
 static int tls_gs_offset;
@@ -5117,6 +5121,8 @@ mono_arch_patch_code_new (MonoCompile *cfg, MonoDomain *domain, guint8 *code, Mo
 	}
 }
 
+#ifndef DISABLE_JIT
+
 static G_GNUC_UNUSED void
 stack_unaligned (MonoMethod *m, gpointer caller)
 {
@@ -5562,6 +5568,8 @@ mono_arch_emit_exceptions (MonoCompile *cfg)
 	set_code_cursor (cfg, code);
 }
 
+#endif /* DISABLE_JIT */
+
 MONO_NEVER_INLINE
 void
 mono_arch_flush_icache (guint8 *code, gint size)
@@ -5778,6 +5786,8 @@ mono_arch_get_cie_program (void)
 	return l;
 }
 
+#ifndef DISABLE_JIT
+
 MonoInst*
 mono_arch_emit_inst_for_method (MonoCompile *cfg, MonoMethod *cmethod, MonoMethodSignature *fsig, MonoInst **args)
 {
@@ -5842,6 +5852,8 @@ mono_arch_emit_inst_for_method (MonoCompile *cfg, MonoMethod *cmethod, MonoMetho
 
 	return ins;
 }
+
+#endif /* DISABLE_JIT */
 
 guint32
 mono_arch_get_patch_offset (guint8 *code)
@@ -6219,6 +6231,8 @@ mono_arch_context_set_int_reg (MonoContext *ctx, int reg, mgreg_t val)
 
 #ifdef MONO_ARCH_SIMD_INTRINSICS
 
+#ifndef DISABLE_JIT
+
 static MonoInst*
 get_float_to_x_spill_area (MonoCompile *cfg)
 {
@@ -6273,6 +6287,8 @@ mono_arch_decompose_opts (MonoCompile *cfg, MonoInst *ins)
 	ins->type = STACK_I4;
 	ins->backend.source_opcode = src_opcode;
 }
+
+#endif /* DISABLE_JIT */
 
 #endif /* #ifdef MONO_ARCH_SIMD_INTRINSICS */
 
@@ -6383,6 +6399,8 @@ mono_arch_decompose_long_opts (MonoCompile *cfg, MonoInst *long_ins)
 #endif /* MONO_ARCH_SIMD_INTRINSICS */
 }
 
+#ifndef DISABLE_JIT
+
 /*
  * mono_aot_emit_load_got_addr:
  *
@@ -6427,6 +6445,8 @@ mono_arch_emit_load_aotconst (guint8 *start, guint8 *code, MonoJumpInfo **ji, Mo
 
 	return code;
 }
+
+#endif /* DISABLE_JIT */
 
 /* Can't put this into mini-x86.h */
 gpointer

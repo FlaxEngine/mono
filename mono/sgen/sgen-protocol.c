@@ -97,7 +97,19 @@ binary_protocol_open_file (gboolean assert_on_failure)
 		filename = filename_or_prefix;
 
 #if defined(HOST_WIN32)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	binary_protocol_file = CreateFileA (filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+#else
+    CREATEFILE2_EXTENDED_PARAMETERS param = { 0 };
+    param.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+    param.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+    param.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+    const size_t filename_size = strlen (filename) + 1;
+    wchar_t* filename_wc = malloc( filename_size);
+    mbstowcs (filename_wc, filename, filename_size);
+    binary_protocol_file = CreateFile2 (filename_wc, (DWORD)GENERIC_WRITE, (DWORD)0, (DWORD)CREATE_ALWAYS, &param);
+    free(filename_wc);
+#endif
 #elif defined(HAVE_UNISTD_H)
 	do {
 		binary_protocol_file = open (filename, O_CREAT | O_WRONLY, 0644);

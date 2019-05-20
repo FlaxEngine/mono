@@ -70,6 +70,8 @@ LONG CALLBACK seh_unhandled_exception_filter(EXCEPTION_POINTERS* ep)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 /*
  * mono_win32_get_handle_stackoverflow (void):
  *
@@ -120,6 +122,14 @@ mono_win32_get_handle_stackoverflow (void)
 
 	return start;
 }
+#else
+static gpointer
+mono_win32_get_handle_stackoverflow (void)
+{
+	// _resetstkoflw unsupported on none desktop Windows platforms.
+	return NULL;
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 /* Special hack to workaround the fact that the
  * when the SEH handler is called the stack is
@@ -252,14 +262,18 @@ void win32_seh_init()
 		restore_stack = (void (*) (void*))mono_win32_get_handle_stackoverflow ();
 
 	mono_old_win_toplevel_exception_filter = SetUnhandledExceptionFilter(seh_unhandled_exception_filter);
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	mono_win_vectored_exception_handle = AddVectoredExceptionHandler (1, seh_vectored_exception_handler);
+#endif
 }
 
 void win32_seh_cleanup()
 {
 	if (mono_old_win_toplevel_exception_filter)
 		SetUnhandledExceptionFilter(mono_old_win_toplevel_exception_filter);
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	RemoveVectoredExceptionHandler (mono_win_vectored_exception_handle);
+#endif
 }
 
 void win32_seh_set_handler(int type, MonoW32ExceptionHandler handler)
@@ -280,6 +294,8 @@ void win32_seh_set_handler(int type, MonoW32ExceptionHandler handler)
 }
 
 #endif /* TARGET_WIN32 */
+
+#ifndef DISABLE_JIT
 
 /*
  * mono_arch_get_restore_context:
@@ -446,6 +462,9 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 	return start;
 }
 
+
+#endif /* DISABLE_JIT */
+
 /*
  * mono_x86_throw_exception:
  *
@@ -508,6 +527,8 @@ mono_x86_throw_corlib_exception (mgreg_t *regs, guint32 ex_token_index,
 
 	mono_x86_throw_exception (regs, (MonoObject*)ex, eip, FALSE);
 }
+
+#ifndef DISABLE_JIT
 
 static void
 mono_x86_resume_unwind (mgreg_t *regs, MonoObject *exc, 
@@ -721,6 +742,46 @@ mono_arch_get_throw_corlib_exception (MonoTrampInfo **info, gboolean aot)
 	return get_throw_trampoline ("throw_corlib_exception", FALSE, FALSE, TRUE, FALSE, FALSE, info, aot);
 }
 
+
+#else /* DISABLE_JIT */
+
+gpointer
+mono_arch_get_restore_context (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer
+mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer 
+mono_arch_get_throw_exception (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer
+mono_arch_get_rethrow_exception (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer 
+mono_arch_get_throw_corlib_exception (MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+#endif /* !DISABLE_JIT */
+
 void
 mono_arch_exceptions_init (void)
 {
@@ -733,7 +794,14 @@ mono_arch_exceptions_init (void)
  * or (eventually) Windows 7 SP1.
  */
 #ifdef TARGET_WIN32
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	HMODULE kernel32 = LoadLibraryW (L"kernel32.dll");
+#else
+    // HACK for UWP (ref: https://www.codeguru.com/cpp/w-p/dll/tips/article.php/c3635/Tip-Detecting-a-HMODULEHINSTANCE-Handle-Within-the-Module-Youre-Running-In.htm)
+    MEMORY_BASIC_INFORMATION mbi = {0};
+    VirtualQuery( VirtualQuery, &mbi, sizeof(mbi) );
+    HMODULE kernel32 = (HMODULE)mbi.AllocationBase;
+#endif
 	if (kernel32) {
 		typedef BOOL (WINAPI * SetProcessUserModeExceptionPolicy_t) (DWORD dwFlags);
 		typedef BOOL (WINAPI * GetProcessUserModeExceptionPolicy_t) (PDWORD dwFlags);
@@ -754,6 +822,7 @@ mono_arch_exceptions_init (void)
 		return;
 	}
 
+#ifndef DISABLE_JIT
 	/* LLVM needs different throw trampolines */
 	tramp = get_throw_trampoline ("llvm_throw_exception_trampoline", FALSE, TRUE, FALSE, FALSE, FALSE, &tinfo, FALSE);
 	mono_register_jit_icall (tramp, "llvm_throw_exception_trampoline", NULL, TRUE);
@@ -774,6 +843,7 @@ mono_arch_exceptions_init (void)
 	tramp = get_throw_trampoline ("llvm_resume_unwind_trampoline", FALSE, FALSE, FALSE, FALSE, TRUE, &tinfo, FALSE);
 	mono_register_jit_icall (tramp, "llvm_resume_unwind_trampoline", NULL, TRUE);
 	mono_tramp_info_register (tinfo, NULL);
+#endif /* DISABLE_JIT */
 
 	signal_exception_trampoline = mono_x86_get_signal_exception_trampoline (&tinfo, FALSE);
 	mono_tramp_info_register (tinfo, NULL);
