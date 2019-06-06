@@ -38,6 +38,7 @@
 #include "mono/utils/checked-build.h"
 #include "mono/utils/mono-digest.h"
 #include "mono/utils/w32api.h"
+#include "assembly-internals.h"
 #ifdef MONO_CLASS_DEF_PRIVATE
 /* Rationale: Some of the code here does MonoClass construction.
  * FIXME: Move SRE class construction to class-init.c and unify with ordinary class construction.
@@ -4035,7 +4036,7 @@ is_dynamic_method_from_assembly(MonoObject* obj, gpointer queue_user_data, gpoin
 		return TRUE;
 	if (mb == 0)
 		return release_data->assembly == assembly;
-	if (mb->module->image == mono_assembly_get_image(assembly))
+	if (mb->module->image == mono_assembly_get_image_internal (assembly))
 		return TRUE;
 
 	return FALSE;

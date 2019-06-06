@@ -303,7 +303,7 @@ mono_debug_add_assembly (MonoAssembly *assembly, gpointer user_data)
 	mono_debugger_lock ();
 
 	if (mono_auto_load_symbols) {
-		image = mono_assembly_get_image(assembly);
+		image = mono_assembly_get_image_internal(assembly);
 		handle = open_symfile_from_bundle(image);
 		if (!handle)
 			mono_debug_open_image(image, NULL, 0);

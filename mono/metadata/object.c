@@ -7044,7 +7044,7 @@ mono_object_unbox (MonoObject *obj)
 gboolean
 mono_object_is_from_assembly(MonoObject *obj, MonoAssembly *assembly)
 {
-	return mono_class_is_from_assembly(mono_object_get_class(obj), assembly);
+	return mono_class_is_from_assembly(mono_object_class(obj), assembly);
 }
 
 /**

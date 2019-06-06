@@ -4508,7 +4508,9 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 	if (is_only_assembly_unload)
 	{
 		mono_gc_collect (mono_gc_max_generation());
+#if defined(HAVE_SGEN_GC)
 		mono_gc_finalize_assembly (assembly);
+#endif
 		mono_gc_invoke_finalizers ();
 
 		mono_gc_clear_assembly(assembly);
