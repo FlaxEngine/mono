@@ -9,8 +9,7 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
-
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include "mono/metadata/mono-security-windows-internals.h"
 
@@ -41,8 +40,8 @@ ves_icall_System_Security_Principal_WindowsIdentity_GetRoles (gpointer token)
 {
 	// FIXME This is now supported by UWP.
 	ERROR_DECL_VALUE (error); // FIXMEcoop
-	mono_security_win_not_supported ("GetTokenInformation", error);
-	mono_error_set_pending_exception (error); // FIXMEcoop
+	mono_security_win_not_supported ("GetTokenInformation", &error);
+	mono_error_set_pending_exception (&error); // FIXMEcoop
 	return NULL;
 }
 
@@ -62,7 +61,7 @@ ves_icall_System_Security_Principal_WindowsImpersonationContext_SetCurrentToken 
 }
 
 gboolean
-ves_icall_System_Security_Principal_WindowsImpersonationContext_RevertToSelf (MonoError *error))
+ves_icall_System_Security_Principal_WindowsImpersonationContext_RevertToSelf (MonoError *error)
 {
 	mono_security_win_not_supported ("RevertToSelf", error);
 	return FALSE;

@@ -64,6 +64,9 @@
     <ClCompile Include="$(MonoSourceLocation)\mono\metadata\coree.c">
       <Filter>Source Files$(MonoRuntimeFilterSubFolder)\common</Filter>
     </ClCompile>
+    <ClCompile Include="$(MonoSourceLocation)\mono\metadata\coree-windows-uwp.c">
+      <Filter>Source Files$(MonoRuntimeFilterSubFolder)\common</Filter>
+    </ClCompile>
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\coree.h">
       <Filter>Header Files$(MonoRuntimeFilterSubFolder)\common</Filter>
     </ClInclude>

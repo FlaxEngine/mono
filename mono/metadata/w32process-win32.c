@@ -34,7 +34,7 @@
 #include <mono/metadata/w32handle.h>
 #include <mono/utils/w32api.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <shellapi.h>
 #endif
 
@@ -53,7 +53,7 @@ mono_w32process_signal_finished (void)
 {
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 HANDLE
 ves_icall_System_Diagnostics_Process_GetProcess_internal (guint32 pid)
 {
@@ -68,9 +68,9 @@ ves_icall_System_Diagnostics_Process_GetProcess_internal (guint32 pid)
 		return NULL;
 	return handle;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoBoolean
 ves_icall_System_Diagnostics_Process_ShellExecuteEx_internal (MonoW32ProcessStartInfoHandle proc_start_info, MonoW32ProcessInfo *process_info, MonoError *error)
 {
@@ -117,7 +117,7 @@ ves_icall_System_Diagnostics_Process_ShellExecuteEx_internal (MonoW32ProcessStar
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static inline void
 mono_process_init_startup_info (HANDLE stdin_handle, HANDLE stdout_handle, HANDLE stderr_handle, STARTUPINFO *startinfo)
 {
@@ -354,8 +354,8 @@ exit:
 	return ret;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
-static gboolean
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+static inline gboolean
 mono_process_win_enum_processes (DWORD *pids, DWORD count, DWORD *needed)
 {
 	return !!EnumProcesses (pids, count, needed);
@@ -417,7 +417,7 @@ ves_icall_Microsoft_Win32_NativeMethods_GetExitCodeProcess (gpointer handle, gin
 	return GetExitCodeProcess (handle, (PDWORD)exitcode);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static inline MonoBoolean
 mono_icall_get_process_working_set_size (gpointer handle, gsize *min, gsize *max)
 {
@@ -431,7 +431,7 @@ ves_icall_Microsoft_Win32_NativeMethods_GetProcessWorkingSetSize (gpointer handl
 	return mono_icall_get_process_working_set_size (handle, min, max);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static inline MonoBoolean
 mono_icall_set_process_working_set_size (gpointer handle, gsize min, gsize max)
 {
@@ -445,7 +445,7 @@ ves_icall_Microsoft_Win32_NativeMethods_SetProcessWorkingSetSize (gpointer handl
 	return mono_icall_set_process_working_set_size (handle, min, max);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static inline gint32
 mono_icall_get_priority_class (gpointer handle)
 {
@@ -459,7 +459,7 @@ ves_icall_Microsoft_Win32_NativeMethods_GetPriorityClass (gpointer handle, MonoE
 	return mono_icall_get_priority_class (handle);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static inline MonoBoolean
 mono_icall_set_priority_class (gpointer handle, gint32 priorityClass)
 {
@@ -484,3 +484,6 @@ ves_icall_Microsoft_Win32_NativeMethods_GetCurrentProcess (MonoError *error)
 {
 	return GetCurrentProcess ();
 }
+
+// HACK: VS17 not building the included files for UWP
+#include "w32process-win32-uwp.c"

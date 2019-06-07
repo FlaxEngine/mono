@@ -2449,7 +2449,7 @@ mono_main (int argc, char* argv[])
 		g_print ("The Mono Debugger is no longer supported.\n");
 		return 1;
 	} else if (enable_debugging)
-		mono_debug_init (MONO_DEBUG_FORMAT_MONO);
+		mono_debug_init (MONO_DEBUG_FORMAT_MONO, TRUE);
 
 #ifdef HOST_WIN32
 	if (mixed_mode)
@@ -2552,7 +2552,7 @@ mono_main (int argc, char* argv[])
 			exit (1);
 		}
 
-#if defined(HOST_WIN32) && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if defined(HOST_WIN32) && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 		/* Detach console when executing IMAGE_SUBSYSTEM_WINDOWS_GUI on win32 */
 		if (!enable_debugging && !mono_compile_aot && mono_assembly_get_image_internal (assembly)->image_info->cli_header.nt.pe_subsys_required == IMAGE_SUBSYSTEM_WINDOWS_GUI)
 			FreeConsole ();

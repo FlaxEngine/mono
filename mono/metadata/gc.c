@@ -1302,6 +1302,60 @@ mono_gc_reference_queue_add_internal (MonoReferenceQueue *queue, MonoObject *obj
 	return TRUE;
 }
 
+mono_bool
+mono_gc_reference_queue_foreach_remove(MonoReferenceQueue *queue, mono_reference_queue_remove_check func, void *user_data)
+{
+	RefQueueEntry *entry;
+	MonoObject *obj;
+	RefQueueEntry **iter = &queue->queue;
+
+	if (queue->should_be_deleted)
+		return FALSE;
+
+	while ((entry = *iter)) {
+		obj = mono_gchandle_get_target(entry->gchandle);
+		if (obj && func(obj, user_data)) {
+			mono_gchandle_free((guint32)entry->gchandle);
+			ref_list_remove_element(iter, entry);
+			queue->callback(entry->user_data);
+			g_free(entry);
+		}
+		else {
+			iter = &entry->next;
+		}
+	}
+
+	return TRUE;
+}
+
+mono_bool
+mono_gc_reference_queue_foreach_remove2(MonoReferenceQueue *queue, mono_reference_queue_remove2_check func, void *user_data)
+{
+	RefQueueEntry *entry;
+	MonoObject *obj;
+	RefQueueEntry **iter = &queue->queue;
+
+	if (queue->should_be_deleted)
+		return FALSE;
+
+	while ((entry = *iter)) {
+		obj = mono_gchandle_get_target(entry->gchandle);
+		if (func(obj, entry->user_data, user_data)) {
+			if (obj)
+				mono_gchandle_free((guint32)entry->gchandle);
+			ref_list_remove_element(iter, entry);
+			queue->callback(entry->user_data);
+			g_free(entry);
+		}
+		else {
+			iter = &entry->next;
+		}
+	}
+
+	return TRUE;
+}
+
+
 /**
  * mono_gc_reference_queue_free:
  * \param queue the queue that should be freed.

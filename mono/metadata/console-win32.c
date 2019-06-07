@@ -42,7 +42,7 @@ mono_console_handle_async_ops (void)
 {
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoBoolean
 ves_icall_System_ConsoleDriver_Isatty (HANDLE handle, MonoError* error)
 {
@@ -74,3 +74,6 @@ ves_icall_System_ConsoleDriver_TtySetup (MonoStringHandle keypad, MonoStringHand
 	return FALSE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+// HACK: VS17 not building the included files for UWP
+#include "console-win32-uwp.c"

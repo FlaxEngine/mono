@@ -1337,6 +1337,8 @@ mono_arch_get_argument_info (MonoMethodSignature *csig, int param_count, MonoJit
 	return args_size;
 }
 
+#ifndef DISABLE_JIT
+
 gboolean
 mono_arch_tailcall_supported (MonoCompile *cfg, MonoMethodSignature *caller_sig, MonoMethodSignature *callee_sig)
 {
@@ -1362,6 +1364,8 @@ mono_arch_tailcall_supported (MonoCompile *cfg, MonoMethodSignature *caller_sig,
 
 	return res;
 }
+
+#endif /* DISABLE_JIT */
 
 /*
  * Initialize the cpu to execute managed code.
@@ -2982,6 +2986,8 @@ mono_arch_finish_dyn_call (MonoDynCallInfo *info, guint8 *buf)
 	}
 }
 
+#ifndef DISABLE_JIT
+
 /* emit an exception if condition is fail */
 #define EMIT_COND_SYSTEM_EXCEPTION(cond,signed,exc_name)            \
         do {                                                        \
@@ -3168,9 +3174,6 @@ store_membase_imm_to_store_membase_reg (int opcode)
 
 	return -1;
 }
-
-#ifndef DISABLE_JIT
-
 #define INST_IGNORES_CFLAGS(opcode) (!(((opcode) == OP_ADC) || ((opcode) == OP_ADC_IMM) || ((opcode) == OP_IADC) || ((opcode) == OP_IADC_IMM) || ((opcode) == OP_SBB) || ((opcode) == OP_SBB_IMM) || ((opcode) == OP_ISBB) || ((opcode) == OP_ISBB_IMM)))
 
 /*
@@ -7679,8 +7682,6 @@ mono_arch_emit_exceptions (MonoCompile *cfg)
 	set_code_cursor (cfg, code);
 }
 
-#endif /* DISABLE_JIT */
-
 void*
 mono_arch_instrument_prolog (MonoCompile *cfg, void *func, void *p, gboolean enable_arguments)
 {
@@ -7834,6 +7835,8 @@ mono_arch_instrument_epilog (MonoCompile *cfg, void *func, void *p, gboolean ena
 
 	return code;
 }
+
+#endif /* DISABLE_JIT */
 
 MONO_NEVER_INLINE
 void

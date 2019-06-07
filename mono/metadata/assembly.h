@@ -64,6 +64,10 @@ MONO_API char*         mono_stringify_assembly_name (MonoAssemblyName *aname);
 typedef void  (*MonoAssemblyLoadFunc)         (MonoAssembly *assembly, void* user_data);
 MONO_API void          mono_install_assembly_load_hook (MonoAssemblyLoadFunc func, void* user_data);
 
+/* Installs a function which is called each time an assembly is unloaded. */
+typedef void(*MonoAssemblyUnloadFunc)         (MonoAssembly *assembly, void* user_data);
+MONO_API void          mono_install_assembly_unload_hook(MonoAssemblyUnloadFunc func, void* user_data);
+
 /* 
  * Installs a new function which is used to search the list of loaded 
  * assemblies for a given assembly name.

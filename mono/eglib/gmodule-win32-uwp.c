@@ -7,9 +7,16 @@
 #include <config.h>
 #include <glib.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include <gmodule-win32-internals.h>
+
+GModule *
+g_module_open (const gchar *file, GModuleFlags flags)
+{
+	g_unsupported_api ("g_module_open");
+	return NULL;
+}
 
 gpointer
 w32_find_symbol (const gchar *symbol_name)

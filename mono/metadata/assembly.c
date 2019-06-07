@@ -43,6 +43,7 @@
 #include <mono/utils/mono-io-portability.h>
 #include <mono/utils/atomic.h>
 #include <mono/utils/mono-os-mutex.h>
+#include "mono-ptr-array.h"
 
 #ifndef HOST_WIN32
 #include <sys/types.h>
@@ -1743,6 +1744,56 @@ free_assembly_load_hooks (void)
 	for (hook = assembly_load_hook; hook; hook = next) {
 		next = hook->next;
 		g_free (hook);
+	}
+}
+
+typedef struct AssemblyUnloadHook AssemblyUnloadHook;
+struct AssemblyUnloadHook {
+	AssemblyUnloadHook *next;
+	MonoAssemblyUnloadFunc func;
+	gpointer user_data;
+};
+
+AssemblyUnloadHook *assembly_unload_hook = NULL;
+
+/**
+* mono_assembly_invoke_unload_hook:
+*/
+void
+mono_assembly_invoke_unload_hook(MonoAssembly *ass)
+{
+	AssemblyUnloadHook *hook;
+
+	for (hook = assembly_unload_hook; hook; hook = hook->next) {
+		hook->func(ass, hook->user_data);
+	}
+}
+
+/**
+* mono_install_assembly_unload_hook:
+*/
+void
+mono_install_assembly_unload_hook(MonoAssemblyUnloadFunc func, gpointer user_data)
+{
+	AssemblyUnloadHook *hook;
+
+	g_return_if_fail(func != NULL);
+
+	hook = g_new0(AssemblyUnloadHook, 1);
+	hook->func = func;
+	hook->user_data = user_data;
+	hook->next = assembly_unload_hook;
+	assembly_unload_hook = hook;
+}
+
+static void
+free_assembly_unload_hooks(void)
+{
+	AssemblyUnloadHook *hook, *next;
+
+	for (hook = assembly_unload_hook; hook; hook = next) {
+		next = hook->next;
+		g_free(hook);
 	}
 }
 
@@ -4232,10 +4283,15 @@ mono_assembly_load_full_gac_base_default (MonoAssemblyName *aname,
 					  MonoImageOpenStatus *status)
 {
 	MonoAssembly *result;
+	MonoAssemblyName maped_aname;
 	char *fullpath, *filename;
 	int ext_index;
 	const char *ext;
 	int len;
+
+	/* If we remap e.g. 4.1.3.0 to 4.0.0.0, look in the 4.0.0.0
+	 * GAC directory, not 4.1.3.0 */
+	aname = mono_assembly_remap_version (aname, &maped_aname);
 
 	/* Currently we retrieve the loaded corlib for reflection 
 	 * only requests, like a common reflection only assembly 
@@ -4442,11 +4498,27 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 	if (mono_atomic_dec_i32 (&assembly->ref_count) > 0)
 		return FALSE;
 
-	MONO_PROFILER_RAISE (assembly_unloading, (assembly));
+	MonoDomain *domain = mono_domain_get();
+	gboolean is_only_assembly_unload = domain && domain->domain && !mono_domain_is_unloading(domain) && !mono_runtime_is_shutting_down();
 
 	mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Unloading assembly %s [%p].", assembly->aname.name, assembly);
 
+	MONO_PROFILER_RAISE (assembly_unloading, (assembly));
+
+	if (is_only_assembly_unload)
+	{
+		mono_gc_collect (mono_gc_max_generation());
+#if defined(HAVE_SGEN_GC)
+		mono_gc_finalize_assembly (assembly);
+#endif
+		mono_gc_invoke_finalizers ();
+
+		mono_gc_clear_assembly(assembly);
+	}
+
 	mono_debug_close_image (assembly->image);
+	
+	mono_assembly_invoke_unload_hook (assembly);
 
 	mono_assemblies_lock ();
 	loaded_assemblies = g_list_remove (loaded_assemblies, assembly);
@@ -4571,6 +4643,7 @@ mono_assemblies_cleanup (void)
 
 	free_assembly_asmctx_from_path_hooks ();
 	free_assembly_load_hooks ();
+	free_assembly_unload_hooks();
 	free_assembly_search_hooks ();
 	free_assembly_preload_hooks ();
 }

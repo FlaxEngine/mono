@@ -32,7 +32,7 @@
 #include "coree.h"
 #include "coree-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <shellapi.h>
 #endif
 
@@ -73,7 +73,7 @@ mono_get_module_file_name (HMODULE module_handle)
 }
 
 /* Entry point called by LdrLoadDll of ntdll.dll after _CorValidateImage. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 BOOL STDMETHODCALLTYPE _CorDllMain(HINSTANCE hInst, DWORD dwReason, LPVOID lpReserved)
 {
 	MonoAssembly* assembly;
@@ -143,7 +143,7 @@ BOOL STDMETHODCALLTYPE _CorDllMain(HINSTANCE hInst, DWORD dwReason, LPVOID lpRes
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 /* Called by ntdll.dll reagardless of entry point after _CorValidateImage. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 __int32 STDMETHODCALLTYPE _CorExeMain(void)
 {
 	ERROR_DECL (error);
@@ -228,11 +228,15 @@ void STDMETHODCALLTYPE CorExitProcess(int exitCode)
 		mono_runtime_quit ();
 	}
 #endif
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	TerminateProcess (GetCurrentProcess(), exitCode);
+#else
 	ExitProcess (exitCode);
+#endif
 }
 
 /* Called by ntdll.dll before _CorDllMain and _CorExeMain. */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 STDAPI _CorValidateImage(PVOID *ImageBase, LPCWSTR FileName)
 {
 	IMAGE_DOS_HEADER* DosHeader;
@@ -417,7 +421,7 @@ STDAPI CorBindToRuntime(LPCWSTR pwszVersion, LPCWSTR pwszBuildFlavor, REFCLSID r
 	return CorBindToRuntimeEx (pwszVersion, pwszBuildFlavor, 0, rclsid, riid, ppv);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 HMODULE WINAPI MonoLoadImage(LPCWSTR FileName)
 {
 	HANDLE FileHandle;
@@ -509,6 +513,8 @@ typedef struct _EXPORT_FIXUP
 #endif
 	} ProcAddress;
 } EXPORT_FIXUP;
+
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 
 /* Has to be binary ordered. */
 static const EXPORT_FIXUP ExportFixups[] = {
@@ -849,7 +855,9 @@ STDAPI MonoFixupExe(HMODULE ModuleHandle)
 	return S_OK;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#endif
+
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 void
 mono_coree_set_act_ctx (const char* file_name)
 {
@@ -926,6 +934,7 @@ mono_load_coree (const char* exe_file_name)
 	if (!init_from_coree && exe_file_name)
 		mono_coree_set_act_ctx (exe_file_name);
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	/* ntdll.dll loads mscoree.dll from the system32 directory. */
 	required_size = GetSystemDirectory (NULL, 0);
 	file_name = g_new (gunichar2, required_size + 12);
@@ -944,13 +953,16 @@ mono_load_coree (const char* exe_file_name)
 	}
 
 	coree_module_handle = module_handle;
+#endif
 }
 
 void
 mono_fixup_exe_image (MonoImage* image)
 {
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 	if (!init_from_coree && image && image->is_module_handle)
 		MonoFixupExe ((HMODULE) image->raw_data);
+#endif
 }
 
 #endif /* HOST_WIN32 */

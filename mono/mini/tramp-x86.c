@@ -28,6 +28,8 @@
 #include "debugger-agent.h"
 #include "jit-icalls.h"
 
+#ifndef DISABLE_JIT
+
 /*
  * mono_arch_get_unbox_trampoline:
  * @m: method pointer
@@ -87,6 +89,24 @@ mono_arch_get_static_rgctx_trampoline (gpointer arg, gpointer addr)
 	return start;
 }
 
+#else /* DISABLE_JIT */
+
+gpointer
+mono_arch_get_unbox_trampoline (MonoMethod *m, gpointer addr)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer
+mono_arch_get_static_rgctx_trampoline (gpointer arg, gpointer addr)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+#endif /* !DISABLE_JIT */
+
 void
 mono_arch_patch_callsite (guint8 *method_start, guint8 *orig_code, guint8 *addr)
 {
@@ -139,6 +159,8 @@ mono_arch_patch_plt_entry (guint8 *code, gpointer *got, mgreg_t *regs, guint8 *a
 		got = (gpointer*)(gsize) regs [MONO_ARCH_GOT_REG];
 	*(guint8**)((guint8*)got + offset) = addr;
 }
+
+#ifndef DISABLE_JIT
 
 guchar*
 mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInfo **info, gboolean aot)
@@ -552,6 +574,31 @@ mono_arch_create_general_rgctx_lazy_fetch_trampoline (MonoTrampInfo **info, gboo
 	return buf;
 }
 
+#else /* DISABLE_JIT */
+
+guchar*
+mono_arch_create_generic_trampoline (MonoTrampolineType tramp_type, MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer
+mono_arch_create_specific_trampoline (gpointer arg1, MonoTrampolineType tramp_type, MonoDomain *domain, guint32 *code_len)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+gpointer
+mono_arch_create_rgctx_lazy_fetch_trampoline (guint32 slot, MonoTrampInfo **info, gboolean aot)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+#endif /* !DISABLE_JIT */
+
 void
 mono_arch_invalidate_method (MonoJitInfo *ji, void *func, gpointer func_arg)
 {
@@ -580,6 +627,8 @@ mono_arch_get_plt_info_offset (guint8 *plt_entry, mgreg_t *regs, guint8 *code)
 {
 	return *(guint32*)(plt_entry + 6);
 }
+
+#ifndef DISABLE_JIT
 
 /*
  * mono_arch_get_gsharedvt_arg_trampoline:
@@ -611,6 +660,17 @@ mono_arch_get_gsharedvt_arg_trampoline (MonoDomain *domain, gpointer arg, gpoint
 
 	return start;
 }
+
+#else
+
+gpointer
+mono_arch_get_gsharedvt_arg_trampoline (MonoDomain *domain, gpointer arg, gpointer addr)
+{
+	g_assert_not_reached ();
+	return NULL;
+}
+
+#endif /* DISABLE_JIT */
 
 /*
  * mono_arch_create_sdb_trampoline:

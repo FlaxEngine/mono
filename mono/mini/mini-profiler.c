@@ -165,7 +165,7 @@ void
 mini_profiler_context_enable (void)
 {
 	if (!mono_debug_enabled ())
-		mono_debug_init (MONO_DEBUG_FORMAT_MONO);
+		mono_debug_init (MONO_DEBUG_FORMAT_MONO, TRUE);
 }
 
 static gpointer

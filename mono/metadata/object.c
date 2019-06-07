@@ -7046,6 +7046,12 @@ mono_object_unbox (MonoObject *obj)
 	return res;
 }
 
+gboolean
+mono_object_is_from_assembly(MonoObject *obj, MonoAssembly *assembly)
+{
+	return mono_class_is_from_assembly(mono_object_class(obj), assembly);
+}
+
 /**
  * mono_object_isinst:
  * \param obj an object

@@ -13,7 +13,7 @@
 #include <windows.h>
 #include "mono/metadata/mono-security-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 #include <aclapi.h>
 #include <accctrl.h>
 #endif
@@ -22,8 +22,7 @@
 #define PROTECTED_DACL_SECURITY_INFORMATION	0x80000000L
 #endif
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
-
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static gunichar2*
 GetSidName (gunichar2 *server, PSID sid, gint32 *size)
 {
@@ -148,7 +147,7 @@ ves_icall_System_Security_Principal_WindowsIdentity_GetUserToken (MonoStringHand
 	return token;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 MonoArray*
 ves_icall_System_Security_Principal_WindowsIdentity_GetRoles (gpointer token)
 {
@@ -206,7 +205,7 @@ ves_icall_System_Security_Principal_WindowsImpersonationContext_CloseToken (gpoi
 	return !!CloseHandle (token);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 gpointer
 ves_icall_System_Security_Principal_WindowsImpersonationContext_DuplicateToken (gpointer token, MonoError *error)
 {
@@ -231,8 +230,7 @@ ves_icall_System_Security_Principal_WindowsPrincipal_IsMemberOfGroupName (gpoint
 	return FALSE;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
-
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 static PSID
 GetSidHelper (const SID_IDENTIFIER_AUTHORITY *authority, BYTE subAuthorityCount, DWORD subAuthority0, DWORD subAuthority1)
 {
@@ -477,3 +475,6 @@ ves_icall_Mono_Security_Cryptography_KeyPairPersistence_ProtectUser (const gunic
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "mono-security-windows-uwp.c"

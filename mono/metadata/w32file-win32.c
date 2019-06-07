@@ -52,15 +52,19 @@ void ves_icall_System_IO_MonoIO_DumpHandles (void)
 	return;
 }
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 gpointer
 mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)
 {
 	gpointer res;
 	MONO_ENTER_GC_SAFE;
-	res = CreateFile (name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
+	res = CreateFile(name, fileaccess, sharemode, NULL, createmode, attrs, NULL);
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
+
+#endif
 
 gboolean
 mono_w32file_close (gpointer handle)
@@ -380,7 +384,18 @@ mono_w32file_get_volume_information (const gunichar2 *path, gunichar2 *volumenam
 	return res;
 }
 
-#if HAVE_API_SUPPORT_WIN32_MOVE_FILE
+guint32
+mono_w32file_get_drive_type(const gunichar2 *root_path_name)
+{
+	guint32 res;
+	MONO_ENTER_GC_SAFE;
+	res = GetDriveType(root_path_name);
+	MONO_EXIT_GC_SAFE;
+	return res;
+}
+
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+
 gboolean
 mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 {
@@ -536,16 +551,6 @@ WINAPI
 GetDriveTypeW (
 	PCWSTR RootPathName
 	);
-
-guint32
-mono_w32file_get_drive_type (const gunichar2 *root_path_name)
-{
-	guint32 res;
-	MONO_ENTER_GC_SAFE;
-	res = GetDriveType (root_path_name);
-	MONO_EXIT_GC_SAFE;
-	return res;
-}
 #endif
 
 #if HAVE_API_SUPPORT_WIN32_GET_LOGICAL_DRIVE_STRINGS
@@ -558,4 +563,5 @@ mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
-#endif
+
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */

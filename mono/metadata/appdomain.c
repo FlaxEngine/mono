@@ -109,6 +109,9 @@ static gboolean
 mono_domain_asmctx_from_path (const char *fname, MonoAssembly *requesting_assembly, gpointer user_data, MonoAssemblyContextKind *out_asmctx);
 
 static void
+mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data);
+
+static void
 add_assemblies_to_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *hash);
 
 static MonoAppDomainHandle
@@ -290,6 +293,7 @@ mono_runtime_init_checked (MonoDomain *domain, MonoThreadStartCB start_cb, MonoT
 	mono_install_assembly_postload_search_hook ((MonoAssemblySearchFunc)mono_domain_assembly_postload_search, GUINT_TO_POINTER (FALSE));
 	mono_install_assembly_postload_refonly_search_hook ((MonoAssemblySearchFunc)mono_domain_assembly_postload_search, GUINT_TO_POINTER (TRUE));
 	mono_install_assembly_load_hook (mono_domain_fire_assembly_load, NULL);
+	mono_install_assembly_unload_hook(mono_domain_fire_assembly_unload, NULL);
 	mono_install_assembly_asmctx_from_path_hook (mono_domain_asmctx_from_path, NULL);
 
 	mono_thread_init (start_cb, attach_cb);
@@ -428,6 +432,47 @@ mono_check_corlib_version_internal (void)
 exit:
 	g_free (version);
 	return result;
+}
+
+static void
+clear_cached_vtable (MonoVTable *vtable)
+{
+	MonoClass *klass = vtable->klass;
+	MonoDomain *domain = vtable->domain;
+	MonoClassRuntimeInfo *runtime_info;
+	void *data;
+
+	runtime_info = klass->runtime_info;
+	if (runtime_info && runtime_info->max_domain >= domain->domain_id)
+		runtime_info->domain_vtables [domain->domain_id] = NULL;
+	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
+		mono_gc_free_fixed (data);
+}
+
+static G_GNUC_UNUSED void
+zero_static_data (MonoVTable *vtable)
+{
+	MonoClass *klass = vtable->klass;
+	void *data;
+
+	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
+		mono_gc_bzero_aligned (data, mono_class_data_size (klass));
+}
+
+static void
+deregister_reflection_info_roots_from_list (MonoImage *image)
+{
+	GSList *list = image->reflection_info_unregister_classes;
+
+	while (list) {
+		MonoClass *klass = (MonoClass *)list->data;
+
+		mono_class_free_ref_info (klass);
+
+		list = list->next;
+	}
+
+	image->reflection_info_unregister_classes = NULL;
 }
 
 /**
@@ -1406,6 +1451,49 @@ add_assemblies_to_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *ht)
 		g_hash_table_destroy (ht);
 }
 
+/*
+* LOCKING: assumes assemblies_lock in the domain is already locked.
+*/
+static void
+remove_assemblies_from_domain (MonoDomain *domain, MonoAssembly *ass, GHashTable *ht)
+{
+	gint i;
+	GSList *tmp;
+	gboolean destroy_ht = FALSE;
+
+	if (!ass->aname.name)
+		return;
+
+	if (!ht) {
+		ht = g_hash_table_new(mono_aligned_addr_hash, NULL);
+		destroy_ht = TRUE;
+		for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
+			g_hash_table_insert(ht, tmp->data, tmp->data);
+		}
+	}
+
+	if (g_hash_table_lookup(ht, ass)) {
+		//mono_assembly_close(ass); // FIXME: call this for reference assemblies?
+		g_hash_table_remove(ht, ass);
+		domain->domain_assemblies = g_slist_remove(domain->domain_assemblies, ass);
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "Assembly %s[%p] removed from domain %s, ref_count=%d", ass->aname.name, ass, domain->friendly_name, ass->ref_count);
+	}
+
+	// TODO: handle references?
+	/*if (ass->image->references) {
+		for (i = 0; i < ass->image->nreferences; i++) {
+			if (ass->image->references[i] && ass->image->references[i] != REFERENCE_MISSING) {
+				if (g_hash_table_lookup(ht, ass->image->references[i])) {
+					remove_assemblies_from_domain(domain, ass->image->references[i], ht);
+				}
+			}
+		}
+	}*/
+
+	if (destroy_ht)
+		g_hash_table_destroy(ht);
+}
+
 static void
 mono_domain_fire_assembly_load (MonoAssembly *assembly, gpointer user_data)
 {
@@ -1457,6 +1545,141 @@ leave:
 	mono_error_cleanup (error);
 	HANDLE_FUNCTION_RETURN ();
 }
+
+static gboolean
+remove_types_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoType *type = (MonoType*)key;
+	
+	return mono_type_is_from_assembly(type, assembly);
+}
+
+static gboolean
+remove_type_init_exception_hash_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoClass *klass = (MonoClass*)key;
+
+	return mono_class_is_from_assembly(klass, assembly);
+}
+
+static gboolean
+remove_delegate_hash_table_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly * assembly = (MonoAssembly*)user_data;
+	MonoClass *klass = (MonoClass*)key;
+
+	return mono_class_is_from_assembly(klass, assembly);
+}
+
+static void
+mono_domain_fire_assembly_unload (MonoAssembly *assembly, gpointer user_data)
+{
+	HANDLE_FUNCTION_ENTER();
+	gint i;
+	MonoVTable *vtable;
+	MonoDomain *domain = mono_domain_get();
+
+	if (!domain->domain)
+		/* This can happen during startup */
+		goto leave;
+#ifdef ASSEMBLY_LOAD_DEBUG
+	fprintf(stderr, "Unloading %s from domain %s\n", assembly->aname.name, domain->friendly_name);
+#endif
+
+	mono_domain_assemblies_lock(domain);
+	remove_assemblies_from_domain(domain, assembly, NULL);
+	mono_domain_assemblies_unlock(domain);
+
+	// Skip additional work, domain/runtime unload is performing enough clearing
+	if (mono_domain_is_unloading(domain) || mono_runtime_is_shutting_down())
+		goto leave;
+
+	mono_loader_lock();
+	mono_domain_lock(domain);
+
+	mono_reflection_cleanup_assembly(domain, assembly);
+
+	if (domain->class_vtable_array)	{
+
+#if 0
+		// vtables printing
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "==============================================================================================================");
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "vtables:");
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "");
+
+		static GHashTable* hashing = 0;
+		if (hashing == 0)
+			hashing = g_hash_table_new (0, 0);
+
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			char* name = g_hash_table_lookup(hashing, vtable);
+			if (!name)
+			{
+				name = malloc(500);
+				sprintf(name, "%s.%s", vtable->klass->name_space, vtable->klass->name);
+				g_hash_table_insert(hashing, vtable, name);
+			}
+			int vv = mono_class_is_from_assembly(vtable->klass, assembly) ? 1 : 0;
+			mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "vtable at %x (klass at %x) of %s.%s -> %d", (gulong)vtable, (gulong)vtable->klass, vtable->klass->name_space, vtable->klass->name, vv);
+		}
+		
+		mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "==============================================================================================================");
+#endif
+
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+				zero_static_data(vtable);
+			}
+		}
+
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+
+				if (((MonoObject*)vtable->type)->vtable->klass != mono_defaults.runtimetype_class)
+					MONO_GC_UNREGISTER_ROOT_IF_MOVING (vtable->type);
+
+				clear_cached_vtable(vtable);
+			}
+		}
+
+		mono_gc_collect (mono_gc_max_generation());
+		
+		for (i = 0; i < domain->class_vtable_array->len; ++i) {
+			vtable = (MonoVTable *)g_ptr_array_index (domain->class_vtable_array, i);
+			if (mono_class_is_from_assembly(vtable->klass, assembly)) {
+				
+				//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "mono_vtable_remove: %s.%s", vtable->klass->name_space, vtable->klass->name);
+
+				//g_ptr_array_remove_index(domain->class_vtable_array, i);
+				g_ptr_array_remove_index_fast(domain->class_vtable_array, i);
+				i--;
+				if (domain->class_vtable_array->len == 0)
+					break;
+			}
+		}
+	}
+
+	if (domain->type_hash)
+		mono_g_hash_table_foreach_remove(domain->type_hash, remove_types_from_assembly, assembly);
+
+	if (domain->type_init_exception_hash)
+		mono_g_hash_table_foreach_remove(domain->type_init_exception_hash, remove_type_init_exception_hash_from_assembly, assembly);
+
+	if(domain->delegate_hash_table)
+		mono_g_hash_table_foreach_remove(domain->delegate_hash_table, remove_delegate_hash_table_from_assembly, assembly);
+
+	mono_domain_unlock(domain);
+	mono_loader_unlock();
+
+leave:
+	HANDLE_FUNCTION_RETURN();
+}
+
 
 static gboolean
 mono_domain_asmctx_from_path (const char *fname, MonoAssembly *requesting_assembly, gpointer user_data, MonoAssemblyContextKind *out_asmctx)
@@ -2719,31 +2942,6 @@ mono_domain_is_unloading (MonoDomain *domain)
 		return FALSE;
 }
 
-static void
-clear_cached_vtable (MonoVTable *vtable)
-{
-	MonoClass *klass = vtable->klass;
-	MonoDomain *domain = vtable->domain;
-	MonoClassRuntimeInfo *runtime_info;
-	void *data;
-
-	runtime_info = m_class_get_runtime_info (klass);
-	if (runtime_info && runtime_info->max_domain >= domain->domain_id)
-		runtime_info->domain_vtables [domain->domain_id] = NULL;
-	if (m_class_has_static_refs (klass) && (data = mono_vtable_get_static_field_data (vtable)))
-		mono_gc_free_fixed (data);
-}
-
-static G_GNUC_UNUSED void
-zero_static_data (MonoVTable *vtable)
-{
-	MonoClass *klass = vtable->klass;
-	void *data;
-
-	if (m_class_has_static_refs (klass) && (data = mono_vtable_get_static_field_data (vtable)))
-		mono_gc_bzero_aligned (data, mono_class_data_size (klass));
-}
-
 typedef struct unload_data {
 	gboolean done;
 	MonoDomain *domain;
@@ -2765,22 +2963,6 @@ unload_data_unref (unload_data *data)
 			return;
 		}
 	} while (mono_atomic_cas_i32 (&data->refcount, count - 1, count) != count);
-}
-
-static void
-deregister_reflection_info_roots_from_list (MonoImage *image)
-{
-	GSList *list = image->reflection_info_unregister_classes;
-
-	while (list) {
-		MonoClass *klass = (MonoClass *)list->data;
-
-		mono_class_free_ref_info (klass);
-
-		list = list->next;
-	}
-
-	image->reflection_info_unregister_classes = NULL;
 }
 
 static void

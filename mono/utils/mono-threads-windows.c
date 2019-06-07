@@ -101,8 +101,7 @@ mono_threads_suspend_begin_async_resume (MonoThreadInfo *info)
 
 	handle = info->native_handle;
 	g_assert (handle);
-	
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 	if (info->async_target) {
 		MonoContext ctx;
 		CONTEXT context;
@@ -124,15 +123,16 @@ mono_threads_suspend_begin_async_resume (MonoThreadInfo *info)
 
 		mono_monoctx_to_sigctx (&ctx, &context);
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		context.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
 		res = SetThreadContext (handle, &context);
 		if (!res) {
 			return FALSE;
 		}
-	}
 #else
-	g_error ("Not implemented due to lack of SetThreadContext");	
+	    g_error ("Not implemented due to lack of SetThreadContext");	
 #endif
+	}
 
 	result = ResumeThread (handle);
 

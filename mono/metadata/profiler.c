@@ -258,7 +258,7 @@ mono_profiler_enable_coverage (void)
 	mono_profiler_state.coverage_hash = g_hash_table_new (NULL, NULL);
 
 	if (!mono_debug_enabled ())
-		mono_debug_init (MONO_DEBUG_FORMAT_MONO);
+		mono_debug_init (MONO_DEBUG_FORMAT_MONO, TRUE);
 
 	return mono_profiler_state.code_coverage = TRUE;
 }

@@ -168,8 +168,6 @@ mono_win32_wait_for_multiple_objects_ex (DWORD count, CONST HANDLE *handles, BOO
 	return result;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
-
 DWORD
 mono_win32_signal_object_and_wait (HANDLE toSignal, HANDLE toWait, DWORD timeout, BOOL alertable)
 {
@@ -189,9 +187,7 @@ mono_win32_signal_object_and_wait (HANDLE toSignal, HANDLE toWait, DWORD timeout
 	return result;
 }
 
-#endif
-
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 DWORD
 mono_win32_msg_wait_for_multiple_objects_ex (DWORD count, CONST HANDLE *handles, DWORD timeout, DWORD wakeMask, DWORD flags)
 {

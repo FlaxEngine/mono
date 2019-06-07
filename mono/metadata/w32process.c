@@ -1,7 +1,7 @@
 /**
  * \file
  */
-
+#include <config.h>
 #include <glib.h>
 
 #include "w32process.h"
@@ -57,16 +57,24 @@ mono_w32process_get_fileversion_info (const gunichar2 *filename, gpointer *data)
 	DWORD handle;
 	gsize datasize;
 
-	g_assert (data);
+	g_assert(data);
 	*data = NULL;
 
-	datasize = GetFileVersionInfoSize (filename, &handle);
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	datasize = GetFileVersionInfoSizeExW(0, filename, &handle);
+#else
+	datasize = GetFileVersionInfoSize(filename, &handle);
+#endif
 	if (datasize <= 0)
 		return FALSE;
 
-	*data = g_malloc0 (datasize);
-	if (!GetFileVersionInfo (filename, handle, datasize, *data)) {
-		g_free (*data);
+	*data = g_malloc0(datasize);
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	if (!GetFileVersionInfoExW(0, filename, handle, datasize, *data)) {
+#else
+	if (!GetFileVersionInfo(filename, handle, datasize, *data)) {
+#endif
+		g_free(*data);
 		return FALSE;
 	}
 
@@ -444,7 +452,7 @@ ves_icall_System_Diagnostics_FileVersionInfo_GetVersionInfo_internal (MonoObject
 	}
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 
 static GPtrArray*
 get_domain_assemblies (MonoDomain *domain)
@@ -631,7 +639,7 @@ ves_icall_System_Diagnostics_Process_GetModules_internal (MonoObject *this_obj, 
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
 
 MonoString *
 ves_icall_System_Diagnostics_Process_ProcessName_internal (HANDLE process)

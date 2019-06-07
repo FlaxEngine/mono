@@ -7,7 +7,7 @@
 #include <config.h>
 #include <glib.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
 #include <windows.h>
 #include <assert.h>
 
