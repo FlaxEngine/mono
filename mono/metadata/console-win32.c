@@ -42,7 +42,7 @@ mono_console_handle_async_ops (void)
 {
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 MonoBoolean
 ves_icall_System_ConsoleDriver_Isatty (HANDLE handle, MonoError* error)
 {

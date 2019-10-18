@@ -361,7 +361,7 @@ ves_icall_System_Security_Principal_WindowsImpersonationContext_DuplicateToken (
 }
 #endif /* !HOST_WIN32 */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 gboolean
 ves_icall_System_Security_Principal_WindowsImpersonationContext_SetCurrentToken (gpointer token, MonoError *error)
 {

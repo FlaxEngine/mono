@@ -15,7 +15,7 @@
 #include <bcrypt.h>
 #include <limits.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 #ifndef PROV_INTEL_SEC
 #define PROV_INTEL_SEC		22
 #endif

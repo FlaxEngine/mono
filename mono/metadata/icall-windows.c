@@ -14,11 +14,11 @@
 #include "mono/metadata/icall-windows-internals.h"
 #include "mono/metadata/w32subset.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 #include <shlobj.h>
 #endif
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 #pragma comment(lib, "Kernel32.lib")
 #endif
 
@@ -173,7 +173,7 @@ mono_icall_set_environment_variable (MonoString *name, MonoString *value)
 	SetEnvironmentVariable (utf16_name, utf16_value);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 MonoStringHandle
 mono_icall_get_windows_folder_path (int folder, MonoError *error)
 {
@@ -194,7 +194,7 @@ mono_icall_get_windows_folder_path (int folder, MonoError *error)
 }
 #endif
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 MonoBoolean
 mono_icall_broadcast_setting_change (MonoError *error)
 {

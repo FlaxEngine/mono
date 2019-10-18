@@ -80,7 +80,7 @@ mono_dl_close_handle (MonoDl *module)
 		FreeLibrary ((HMODULE)module->handle);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 void*
 mono_dl_lookup_symbol_in_process (const char *symbol_name)
 {
@@ -154,7 +154,7 @@ mono_dl_convert_flags (int flags)
 	return 0;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 char*
 mono_dl_current_error_string (void)
 {

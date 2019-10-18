@@ -32,7 +32,7 @@
 #include <glib.h>
 
 #include <windows.h>
-#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 #include <shlobj.h>
 #endif
 #include <direct.h>
@@ -96,7 +96,7 @@ g_unsetenv(const gchar *variable)
 	g_free(var);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 gchar*
 g_win32_getlocale(void)
 {
@@ -127,7 +127,7 @@ g_path_is_absolute (const char *filename)
 	return FALSE;
 }
 
-#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if _MSC_VER && G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 static gchar*
 g_get_known_folder_path (void)
 {

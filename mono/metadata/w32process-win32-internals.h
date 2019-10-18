@@ -9,7 +9,7 @@
 #include <config.h>
 #include <glib.h>
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || _XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 #include <windows.h>
 #endif
 
@@ -77,7 +77,7 @@ typedef LPSTARTUPINFOA LPSTARTUPINFO;
 
 #endif /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || _XBOX_ONE
+#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 void
 mono_w32process_get_fileversion (MonoObject *filever, gunichar2 *filename, MonoError *error);
 
@@ -104,6 +104,6 @@ mono_icall_set_priority_class (gpointer handle, gint32 priorityClass);
 
 gboolean
 mono_process_win_enum_processes (DWORD *pids, DWORD count, DWORD *needed);
-#endif  /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || _XBOX_ONE */
+#endif  /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 #endif /* __MONO_METADATA_PROCESS_INTERNALS_H__ */

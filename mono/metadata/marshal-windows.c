@@ -14,7 +14,7 @@
 #include <objbase.h>
 #include "mono/metadata/marshal-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 void*
 mono_marshal_alloc_hglobal (size_t size)
 {

@@ -40,7 +40,7 @@ mono_cpu_count (void)
  * battery and performance reasons, shut down cores and
  * lie about the number of active cores.
  */
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 gint32
 mono_cpu_usage (MonoCpuUsageState *prev)
 {

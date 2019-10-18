@@ -42,7 +42,7 @@ struct _GModule {
 	int main_module;
 };
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 
 GModule *
 g_module_open (const gchar *file, GModuleFlags flags)
@@ -138,7 +138,7 @@ g_module_symbol (GModule *module, const gchar *symbol_name, gpointer *symbol)
 	}
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !_XBOX_ONE
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 const gchar *
 g_module_error (void)
 {
