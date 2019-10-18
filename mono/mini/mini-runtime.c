@@ -2540,6 +2540,7 @@ mono_jit_free_method (MonoDomain *domain, MonoMethod *method)
 	g_hash_table_remove (info->dynamic_code_hash, method);
 	mono_domain_jit_code_hash_lock (domain);
 	removed = mono_internal_hash_table_remove (&domain->jit_code_hash, method);
+	g_assert (removed);
 	mono_domain_jit_code_hash_unlock (domain);
 	g_hash_table_remove (info->jump_trampoline_hash, method);
 	g_hash_table_remove (info->seq_points, method);
