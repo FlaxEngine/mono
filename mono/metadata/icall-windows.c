@@ -13,8 +13,13 @@
 #include <windows.h>
 #include "mono/metadata/icall-windows-internals.h"
 #include "mono/metadata/w32subset.h"
-#if HAVE_API_SUPPORT_WIN32_SH_GET_FOLDER_PATH
+
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 #include <shlobj.h>
+#endif
+
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#pragma comment(lib, "Kernel32.lib")
 #endif
 
 void
@@ -44,27 +49,25 @@ mono_icall_module_get_hinstance (MonoImage *image)
 	return (gpointer) (-1);
 }
 
-#if HAVE_API_SUPPORT_WIN32_GET_COMPUTER_NAME
-// Support older UWP SDK?
-WINBASEAPI
-BOOL
-WINAPI
-GetComputerNameW (
-	PWSTR buffer,
-	PDWORD size
-	);
-
 MonoStringHandle
 mono_icall_get_machine_name (MonoError *error)
 {
-	gunichar2 buf [MAX_COMPUTERNAME_LENGTH + 1];
-	DWORD len = G_N_ELEMENTS (buf);
+	gunichar2 *buf;
+	guint32 len;
+	MonoStringHandle result;
 
-	if (GetComputerNameW (buf, &len))
-		return mono_string_new_utf16_handle (mono_domain_get (), buf, len, error);
-	return MONO_HANDLE_NEW (MonoString, NULL);
+	len = MAX_COMPUTERNAME_LENGTH + 1;
+	buf = g_new (gunichar2, len);
+
+	result = MONO_HANDLE_NEW (MonoString, NULL);;
+	if (GetComputerName (buf, (PDWORD) &len)) {
+		result = mono_string_new_utf16_handle (mono_domain_get (), buf, len, error);
+	} else
+		result = MONO_HANDLE_NEW (MonoString, NULL);
+
+	g_free (buf);
+	return result;
 }
-#endif
 
 int
 mono_icall_get_platform (void)
@@ -197,3 +200,6 @@ mono_icall_write_windows_debug_string (const gunichar2 *message)
 }
 
 #endif /* HOST_WIN32 */
+
+// HACK: VS17 not building the included files for UWP
+#include "icall-windows-uwp.c"

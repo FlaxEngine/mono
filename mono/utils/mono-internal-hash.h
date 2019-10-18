@@ -37,6 +37,7 @@ typedef struct _MonoInternalHashTable MonoInternalHashTable;
 
 typedef gpointer (*MonoInternalHashKeyExtractFunc) (gpointer value);
 typedef gpointer* (*MonoInternalHashNextValueFunc) (gpointer value);
+typedef gboolean (*MonoInternalHashRemoveFunc) (gpointer key, gpointer value, gpointer user_data);
 
 struct _MonoInternalHashTable
 {
@@ -70,6 +71,9 @@ mono_internal_hash_table_lookup (MonoInternalHashTable *table, gpointer key);
 void
 mono_internal_hash_table_insert (MonoInternalHashTable *table,
 				 gpointer key, gpointer value);
+
+void
+mono_internal_hash_table_foreach_remove (MonoInternalHashTable *table, MonoInternalHashRemoveFunc func, gpointer user_data);
 
 gboolean
 mono_internal_hash_table_remove (MonoInternalHashTable *table, gpointer key);

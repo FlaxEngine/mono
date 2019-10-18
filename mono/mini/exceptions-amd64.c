@@ -1150,6 +1150,7 @@ init_table_no_lock (void)
 		g_assert_checked (g_rtl_grow_function_table == NULL);
 		g_assert_checked (g_rtl_delete_growable_function_table == NULL);
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 		// Load functions available on Win8/Win2012Server or later. If running on earlier
 		// systems the below GetProceAddress will fail, this is expected behavior.
 		HMODULE ntdll;
@@ -1167,6 +1168,7 @@ init_table_no_lock (void)
 				g_rtl_delete_function_table = (RtlDeleteFunctionTablePtr)GetProcAddress (kernel32dll, "RtlDeleteFunctionTable");
 			}
 		}
+#endif
 
 		g_dyn_func_table_inited = TRUE;
 	}

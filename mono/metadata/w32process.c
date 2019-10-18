@@ -1,7 +1,7 @@
 /**
  * \file
  */
-
+#include <config.h>
 #include <glib.h>
 
 #include "w32process.h"
@@ -61,12 +61,20 @@ mono_w32process_get_fileversion_info (const gunichar2 *filename, gpointer *data)
 	g_assert (data);
 	*data = NULL;
 
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	datasize = GetFileVersionInfoSizeExW (0, filename, &handle);
+#else
 	datasize = GetFileVersionInfoSize (filename, &handle);
+#endif
 	if (datasize <= 0)
 		return FALSE;
 
 	*data = g_malloc0 (datasize);
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	if (!GetFileVersionInfoExW (0, filename, handle, datasize, *data)) {
+#else
 	if (!GetFileVersionInfo (filename, handle, datasize, *data)) {
+#endif
 		g_free (*data);
 		return FALSE;
 	}

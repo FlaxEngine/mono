@@ -3973,6 +3973,174 @@ mini_free_jit_domain_info (MonoDomain *domain)
 	domain->runtime_info = NULL;
 }
 
+static gboolean
+remove_method_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoMethod *method = (MonoMethod*)key;
+
+	if (mono_method_is_from_assembly(method, assembly))
+	{
+		//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "remove_method %s.%s::%s", method->klass->name_space, method->klass->name, method->name);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+struct AssemblyClearData
+{
+	MonoConcurrentHashTable *runtime_invoke_hash;
+	MonoAssembly *assembly;
+};
+
+static void
+remove_conc_method_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	struct AssemblyClearData *data = (struct AssemblyClearData*)user_data;
+	MonoMethod *method = (MonoMethod*)key;
+
+	if (mono_method_is_from_assembly(method, data->assembly))
+	{
+		//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "remove_conc_method %s.%s::%s", method->klass->name_space, method->klass->name, method->name);
+		mono_conc_hashtable_remove(data->runtime_invoke_hash, key);
+	}
+}
+
+static gboolean
+remove_delegate_trampoline_hash_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoClassMethodPair *pair = (MonoClassMethodPair*)key;
+
+	if ((pair->klass && mono_class_is_from_assembly(pair->klass, assembly)) || (pair->method && mono_method_is_from_assembly(pair->method, assembly)))
+	{
+		//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "remove_delegate_trampoline for %s.%s for %s.%s::%s", pair->klass->name_space, pair->klass->name, pair->method->klass->name_space, pair->method->klass->name, pair->method->name);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void
+cleanup_method_refs(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoDomain *domain = (MonoDomain*)user_data;
+	MonoJitDomainInfo *info = domain_jit_info(domain);
+	MonoMethod *method = (MonoMethod*)value;
+
+	//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "cleanup_method_refs %s.%s::%s", method->klass->name_space, method->klass->name, method->name);
+
+	if (mono_use_interpreter)
+	{
+		mono_domain_jit_code_hash_lock(domain);
+		mono_internal_hash_table_remove(&info->interp_code_hash, method);
+		mono_domain_jit_code_hash_unlock(domain);
+	}
+
+	if (info->seq_points)
+		g_hash_table_remove(info->seq_points, method);
+	if (info->arch_seq_points)
+		g_hash_table_remove(info->arch_seq_points, method);
+	if (info->llvm_jit_callees)
+		g_hash_table_remove(info->llvm_jit_callees, method);
+	if (info->dynamic_code_hash)
+		g_hash_table_remove(info->dynamic_code_hash, method);
+	if (info->method_code_hash)
+		g_hash_table_remove(info->method_code_hash, method);
+	if (info->jump_trampoline_hash)
+		g_hash_table_remove(info->jump_trampoline_hash, method);
+	if (info->jump_target_got_slot_hash)
+		g_hash_table_remove(info->jump_target_got_slot_hash, method);
+	if (info->jump_target_hash)
+		g_hash_table_remove(info->jump_target_hash, method);
+	mono_conc_hashtable_remove(info->runtime_invoke_hash, method);
+
+	mono_domain_jit_code_hash_lock(domain);
+	mono_internal_hash_table_remove(&domain->jit_code_hash, method);
+	mono_domain_jit_code_hash_unlock(domain);
+}
+
+static gboolean
+remoce_jit_code_hash_from_assembly(gpointer key, gpointer value, gpointer user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly*)user_data;
+	MonoMethod *method = (MonoMethod*)key;
+
+	if (mono_method_is_from_assembly(method, assembly))
+	{
+		//mono_trace(G_LOG_LEVEL_INFO, MONO_TRACE_ASSEMBLY, "jit_code_hash_found %s.%s::%s", method->klass->name_space, method->klass->name, method->name);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static void
+mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
+{
+	MonoDomain *domain = mono_domain_get();
+
+	// Skip additional work, domain/runtime unload is performing enough clearing
+	if (!domain || !domain->domain || mono_domain_is_unloading(domain) || mono_runtime_is_shutting_down())
+		return;
+
+	MonoJitDomainInfo *info = domain_jit_info(domain);
+
+	//mono_domain_jit_code_hash_lock(domain);
+	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remove_jit_code_hash_from_assembly, assembly);
+	//mono_domain_jit_code_hash_unlock(domain);
+
+	// TODO: don't leak memory here - free seq points and other data when removing from hash tables
+
+	mono_image_lock(assembly->image);
+	
+	if (assembly->image->method_cache)
+		g_hash_table_foreach(assembly->image->method_cache, cleanup_method_refs, domain);
+
+	mono_image_unlock(assembly->image);
+
+	mono_domain_lock(domain);
+
+	if (info->jump_target_hash)
+		g_hash_table_foreach_remove(info->jump_target_hash, remove_method_from_assembly, assembly);
+	if (info->seq_points)
+		g_hash_table_foreach_remove(info->seq_points, remove_method_from_assembly, assembly);
+	if (info->arch_seq_points)
+		g_hash_table_foreach_remove(info->arch_seq_points, remove_method_from_assembly, assembly);
+	if (info->dynamic_code_hash)
+		g_hash_table_foreach_remove(info->dynamic_code_hash, remove_method_from_assembly, assembly);
+	if (info->jump_trampoline_hash)
+		g_hash_table_foreach_remove(info->jump_trampoline_hash, remove_method_from_assembly, assembly);
+	if (info->method_code_hash)
+		g_hash_table_foreach_remove(info->method_code_hash, remove_method_from_assembly, assembly);
+	if (info->jump_target_got_slot_hash)
+		g_hash_table_foreach_remove(info->jump_target_got_slot_hash, remove_method_from_assembly, assembly);
+
+	if (info->runtime_invoke_hash)
+	{
+		struct AssemblyClearData data;
+		data.runtime_invoke_hash = info->runtime_invoke_hash;
+		data.assembly = assembly;
+		mono_conc_hashtable_foreach(info->runtime_invoke_hash, remove_conc_method_from_assembly, &data);
+	}
+
+	// TODO: ugly hack - delete all previously compiled methods
+	g_hash_table_destroy(info->jit_trampoline_hash);
+	info->jit_trampoline_hash = g_hash_table_new(mono_aligned_addr_hash, NULL);
+	mono_internal_hash_table_destroy(&(domain->jit_code_hash));
+	mono_jit_code_hash_init(&(domain->jit_code_hash));
+
+	// TODO: don't leak trampolines and method+klass pairs?
+	
+	g_hash_table_foreach_remove(info->delegate_trampoline_hash, remove_delegate_trampoline_hash_from_assembly, assembly);
+	
+	//g_hash_table_destroy(info->delegate_trampoline_hash);
+	//info->delegate_trampoline_hash = g_hash_table_new(class_method_pair_hash, class_method_pair_equal);
+
+	mono_domain_unlock(domain);
+}
+
 #ifdef MONO_ARCH_HAVE_CODE_CHUNK_TRACKING
 
 static void
@@ -4284,6 +4452,7 @@ mini_init (const char *filename, const char *runtime_version)
 #ifdef JIT_TRAMPOLINES_WORK
 	mono_install_create_domain_hook (mini_create_jit_domain_info);
 	mono_install_free_domain_hook (mini_free_jit_domain_info);
+	mono_install_assembly_unload_hook(mono_domain_fire_assembly_unload, NULL);
 #endif
 	mono_install_get_cached_class_info (mono_aot_get_cached_class_info);
 	mono_install_get_class_from_name (mono_aot_get_class_from_name);

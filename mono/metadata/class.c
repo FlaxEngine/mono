@@ -3842,6 +3842,12 @@ mono_class_is_assignable_from_checked (MonoClass *klass, MonoClass *oklass, gboo
 	*result = mono_class_has_parent (oklass, klass);
 }	
 
+mono_bool
+mono_class_is_from_assembly(MonoClass *klass, MonoAssembly *assembly)
+{
+	return mono_type_is_from_assembly(mono_class_get_type(klass), assembly);
+}
+
 /*Check if @oklass is variant compatible with @klass.*/
 static gboolean
 mono_class_is_variant_compatible_slow (MonoClass *klass, MonoClass *oklass)

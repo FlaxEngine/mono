@@ -47,6 +47,10 @@ mono_method_get_name       (MonoMethod *method);
 MONO_API MonoClass*
 mono_method_get_class      (MonoMethod *method);
 
+// Checks if method or any of the related types (generic arguments, etc.) comes from the given assembly
+MONO_API mono_bool
+mono_method_is_from_assembly(MonoMethod *method, MonoAssembly *assembly);
+
 MONO_API uint32_t
 mono_method_get_token      (MonoMethod *method);
 

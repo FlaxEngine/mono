@@ -42,6 +42,8 @@ struct _GModule {
 	int main_module;
 };
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 GModule *
 g_module_open (const gchar *file, GModuleFlags flags)
 {
@@ -69,7 +71,6 @@ g_module_open (const gchar *file, GModuleFlags flags)
 	return module;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 gpointer
 w32_find_symbol (const gchar *symbol_name)
 {

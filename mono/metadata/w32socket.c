@@ -213,7 +213,11 @@ mono_w32socket_close (SOCKET sock)
 {
 	gboolean ret;
 	MONO_ENTER_GC_SAFE;
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+	ret = CloseHandle ((HANDLE)sock);
+#else
 	ret = closesocket (sock);
+#endif
 	MONO_EXIT_GC_SAFE;
 	return ret;
 }

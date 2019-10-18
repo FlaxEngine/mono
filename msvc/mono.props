@@ -8,7 +8,7 @@
     <!-- GC in use, sgen or boehm, default is sgen. -->
     <MONO_TARGET_GC>sgen</MONO_TARGET_GC>
     <!-- When true, build targets will get a suffix based on used GC. Makes it possible to have builds using different GC's in same build folders, sharing common targets. -->
-    <MONO_USE_TARGET_SUFFIX>true</MONO_USE_TARGET_SUFFIX>
+    <MONO_USE_TARGET_SUFFIX>false</MONO_USE_TARGET_SUFFIX>
     <!-- When true, build will get a separate build folder based on various configuration parameters. Makes it possible separate builds into different output folders under the same build prefix. -->
     <MONO_USE_SEPARATE_BUILD_DIR>true</MONO_USE_SEPARATE_BUILD_DIR>
     <!-- When true, all binaries and libraries will link using static c-runtime. When false, all binaries and libraries will link using dynamic c-runtime.  -->

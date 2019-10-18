@@ -54,6 +54,7 @@ struct _MonoDebugMethodAddress {
 };
 
 static MonoDebugFormat mono_debug_format = MONO_DEBUG_FORMAT_NONE;
+static gboolean mono_auto_load_symbols = TRUE;
 
 static gboolean mono_debug_initialized = FALSE;
 /* Maps MonoImage -> MonoMonoDebugHandle */
@@ -131,13 +132,14 @@ free_debug_handle (MonoDebugHandle *handle)
  * callbacks here.
  */
 void
-mono_debug_init (MonoDebugFormat format)
+mono_debug_init (MonoDebugFormat format, gboolean auto_load_symbols)
 {
 	g_assert (!mono_debug_initialized);
 	if (format == MONO_DEBUG_FORMAT_DEBUGGER)
 		g_error ("The mdb debugger is no longer supported.");
 
 	mono_debug_initialized = TRUE;
+	mono_auto_load_symbols = auto_load_symbols;
 	mono_debug_format = format;
 
 	mono_os_mutex_init_recursive (&debugger_lock_mutex);
@@ -299,11 +301,15 @@ mono_debug_add_assembly (MonoAssembly *assembly, gpointer user_data)
 	MonoImage *image;
 
 	mono_debugger_lock ();
-	image = mono_assembly_get_image_internal (assembly);
-	handle = open_symfile_from_bundle (image);
-	if (!handle)
-		mono_debug_open_image (image, NULL, 0);
-	mono_debugger_unlock ();
+
+	if (mono_auto_load_symbols) {
+		image = mono_assembly_get_image_internal(assembly);
+		handle = open_symfile_from_bundle(image);
+		if (!handle)
+			mono_debug_open_image(image, NULL, 0);
+	}
+	
+	mono_debugger_unlock();
 }
 
 struct LookupMethodData

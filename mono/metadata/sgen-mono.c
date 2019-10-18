@@ -515,6 +515,17 @@ object_in_domain_predicate (MonoObject *obj, void *user_data)
 	return FALSE;
 }
 
+static gboolean
+object_in_assembly_predicate (MonoObject *obj, void *user_data)
+{
+	MonoAssembly *assembly = (MonoAssembly *)user_data;
+	if (mono_object_is_from_assembly (obj, assembly)) {
+		SGEN_LOG (5, "Unregistering finalizer for object: %p (%s)", obj, sgen_client_vtable_get_name (SGEN_LOAD_VTABLE (obj)));
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /**
  * mono_gc_finalizers_for_domain:
  * \param domain the unloading appdomain
@@ -527,6 +538,18 @@ void
 mono_gc_finalize_domain (MonoDomain *domain)
 {
 	sgen_finalize_if (object_in_domain_predicate, domain);
+}
+
+/**
+ * mono_gc_finalizers_for_assembly:
+ * \param assembly the unloading assembly
+ * Enqueue for finalization all objects that belong to the unloading assembly.
+ * \p suspend is used for early termination of the enqueuing process.
+ */
+void
+mono_gc_finalize_assembly(MonoAssembly* assembly)
+{
+	sgen_finalize_if (object_in_assembly_predicate, assembly);
 }
 
 void
@@ -721,6 +744,46 @@ mono_gc_ephemeron_array_add (MonoObject *obj)
 
 	UNLOCK_GC;
 	return TRUE;
+}
+
+/*
+* Assembly handling
+*/
+
+void
+mono_gc_clear_assembly(MonoAssembly * assembly)
+{
+	int i;
+
+	MonoDomain *domain = mono_domain_get();
+
+	LOCK_GC;
+
+	sgen_stop_world(0, FALSE);
+
+	// Collect all objects
+	for (i = GENERATION_NURSERY; i < GENERATION_MAX; ++i)
+		sgen_perform_collection(0, i, "clear assembly", TRUE, FALSE);
+	SGEN_ASSERT(0, !sgen_get_concurrent_collection_in_progress (), "We just ordered a synchronous collection. Why are we collecting concurrently?");
+
+	// Collect things to finalize
+	sgen_major_collector.finish_sweeping();
+	sgen_process_fin_stage_entries();
+
+	sgen_clear_nursery_fragments();
+
+	// Cancel finalization of the assembly stuff (they should be disposed before)
+	for (i = GENERATION_NURSERY; i < GENERATION_MAX; ++i)
+		sgen_remove_finalizers_if(object_in_assembly_predicate, assembly, i);
+
+	if (domain == mono_get_root_domain()) {
+		sgen_pin_stats_report();
+		sgen_object_layout_dump(stdout);
+	}
+
+	sgen_restart_world(0, FALSE);
+
+	UNLOCK_GC;
 }
 
 /*

@@ -24,7 +24,8 @@ __int32 STDMETHODCALLTYPE
 _CorExeMain(void)
 {
 	g_unsupported_api ("_CorExeMain");
-	ExitProcess (EXIT_FAILURE);
+	TerminateProcess (GetCurrentProcess(), EXIT_FAILURE);
+	while (1);
 }
 
 STDAPI

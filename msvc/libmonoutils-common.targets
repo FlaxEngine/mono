@@ -16,6 +16,7 @@
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-complex.h" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl.c" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-windows.c" />
+    <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-windows-uwp.c" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-dl-darwin.c">
       <ExcludedFromBuild>$(ExcludeFromWindowsBuild)</ExcludedFromBuild>
     </ClCompile>
@@ -62,6 +63,7 @@
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-networkinterfaces.h" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-proclib.c" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-proclib-windows.c" />
+    <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-proclib-windows-uwp.c" />
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-proclib.h" />
     <ClInclude Include="$(MonoSourceLocation)\mono\utils\mono-proclib-windows-internals.h" />
     <ClCompile Include="$(MonoSourceLocation)\mono\utils\mono-publib.c" />

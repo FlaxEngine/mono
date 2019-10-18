@@ -343,6 +343,10 @@ mono_type_is_byref       (MonoType *type);
 MONO_API int
 mono_type_get_type       (MonoType *type);
 
+// Checks if type or any of the subtypes (generic arguments, etc.) comes from the given assembly
+MONO_API mono_bool
+mono_type_is_from_assembly(MonoType *type, MonoAssembly *assembly);
+
 /* For MONO_TYPE_FNPTR */
 MONO_API MonoMethodSignature*
 mono_type_get_signature  (MonoType *type);

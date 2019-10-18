@@ -8,6 +8,8 @@
 #include <config.h>
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
+
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 #include <windows.h>
 #include "mono/metadata/icall-windows-internals.h"
 #include "mono/metadata/w32subset.h"
@@ -75,4 +77,7 @@ mono_icall_wait_for_input_idle (gpointer handle, gint32 milliseconds)
 }
 #endif
 
+#else  /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */
+
 MONO_EMPTY_SOURCE_FILE (icall_windows_uwp);
+#endif  /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */

@@ -15,7 +15,14 @@
 #include <bcrypt.h>
 #include <limits.h>
 
-// This implementation requires Windows 7 or newer.
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#ifndef PROV_INTEL_SEC
+#define PROV_INTEL_SEC		22
+#endif
+#ifndef CRYPT_VERIFY_CONTEXT
+#define CRYPT_VERIFY_CONTEXT	0xF0000000
+#endif
+#endif
 
 #define BCRYPT_USE_SYSTEM_PREFERRED_RNG 0x00000002
 const static char mono_rand_provider [ ] = "BCryptGenRandom";

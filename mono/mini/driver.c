@@ -2496,7 +2496,7 @@ mono_main (int argc, char* argv[])
 		g_print ("The Mono Debugger is no longer supported.\n");
 		return 1;
 	} else if (enable_debugging)
-		mono_debug_init (MONO_DEBUG_FORMAT_MONO);
+		mono_debug_init (MONO_DEBUG_FORMAT_MONO, TRUE);
 
 #ifdef HOST_WIN32
 	if (mixed_mode)

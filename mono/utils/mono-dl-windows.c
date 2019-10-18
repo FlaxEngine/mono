@@ -44,6 +44,8 @@ mono_dl_get_so_suffixes (void)
 	return suffixes;
 }
 
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+
 void*
 mono_dl_open_file (const char *file, int flags)
 {
@@ -83,6 +85,8 @@ mono_dl_open_file (const char *file, int flags)
 	}
 	return hModule;
 }
+
+#endif
 
 void
 mono_dl_close_handle (MonoDl *module)

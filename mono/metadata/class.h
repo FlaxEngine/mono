@@ -126,6 +126,10 @@ mono_class_is_subclass_of (MonoClass *klass, MonoClass *klassc,
 MONO_API MONO_RT_EXTERNAL_ONLY mono_bool
 mono_class_is_assignable_from (MonoClass *klass, MonoClass *oklass);
 
+// Checks if type or any of the subtypes (generic arguments, etc.) comes from the given assembly
+MONO_API mono_bool
+mono_class_is_from_assembly(MonoClass *klass, MonoAssembly *assembly);
+
 MONO_API MONO_RT_EXTERNAL_ONLY
 void*
 mono_ldtoken               (MonoImage *image, uint32_t token, MonoClass **retclass, MonoGenericContext *context);

@@ -37,7 +37,7 @@ g_get_current_time (GTimeVal *result)
 	long int l;
 
 	g_return_if_fail (result != NULL);
-	l = GetTickCount();
+	l = GetTickCount64();
 
 	result->tv_sec = l / 1000;
 	result->tv_usec = (l % 1000) * 1000;

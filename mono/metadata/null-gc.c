@@ -366,6 +366,11 @@ mono_gc_suspend_finalizers (void)
 {
 }
 
+void
+mono_gc_clear_assembly(MonoAssembly * assembly)
+{
+}
+
 int
 mono_gc_get_suspend_signal (void)
 {

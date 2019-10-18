@@ -9,9 +9,74 @@
 #include <config.h>
 #include <glib.h>
 
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#include <windows.h>
+#endif
+
 // On platforms not using classic WIN API support the  implementation of bellow methods are hosted in separate source file
 // process-windows-*.c. On platforms using classic WIN API the implementation is still keept in process.c and still declared
 // static and in some places even inlined.
+#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+
+#include <winnt.h>
+
+typedef struct _PROCESS_INFORMATION {
+	HANDLE hProcess;
+	HANDLE hThread;
+	DWORD dwProcessId;
+	DWORD dwThreadId;
+} PROCESS_INFORMATION, *PPROCESS_INFORMATION, *LPPROCESS_INFORMATION;
+
+typedef struct _STARTUPINFOA {
+	DWORD   cb;
+	LPSTR   lpReserved;
+	LPSTR   lpDesktop;
+	LPSTR   lpTitle;
+	DWORD   dwX;
+	DWORD   dwY;
+	DWORD   dwXSize;
+	DWORD   dwYSize;
+	DWORD   dwXCountChars;
+	DWORD   dwYCountChars;
+	DWORD   dwFillAttribute;
+	DWORD   dwFlags;
+	WORD    wShowWindow;
+	WORD    cbReserved2;
+	LPBYTE  lpReserved2;
+	HANDLE  hStdInput;
+	HANDLE  hStdOutput;
+	HANDLE  hStdError;
+} STARTUPINFOA, *LPSTARTUPINFOA;
+typedef struct _STARTUPINFOW {
+	DWORD   cb;
+	LPWSTR  lpReserved;
+	LPWSTR  lpDesktop;
+	LPWSTR  lpTitle;
+	DWORD   dwX;
+	DWORD   dwY;
+	DWORD   dwXSize;
+	DWORD   dwYSize;
+	DWORD   dwXCountChars;
+	DWORD   dwYCountChars;
+	DWORD   dwFillAttribute;
+	DWORD   dwFlags;
+	WORD    wShowWindow;
+	WORD    cbReserved2;
+	LPBYTE  lpReserved2;
+	HANDLE  hStdInput;
+	HANDLE  hStdOutput;
+	HANDLE  hStdError;
+} STARTUPINFOW, *LPSTARTUPINFOW;
+#ifdef UNICODE
+typedef STARTUPINFOW STARTUPINFO;
+typedef LPSTARTUPINFOW LPSTARTUPINFO;
+#else
+typedef STARTUPINFOA STARTUPINFO;
+typedef LPSTARTUPINFOA LPSTARTUPINFO;
+#endif // UNICODE
+
+#endif /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
 #if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 void
 mono_w32process_get_fileversion (MonoObject *filever, gunichar2 *filename, MonoError *error);

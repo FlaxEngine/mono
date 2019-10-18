@@ -76,6 +76,9 @@ call :runCommand "%RUN%" %ARGUMENTS%
 SET RUN=%XCOPY_COMMAND% "%SOURCE_ROOT%\utils\mono-logger.h" "%TARGET_ROOT%\utils\" %OPTIONS%
 call :runCommand "%RUN%" %ARGUMENTS%
 
+SET RUN=%XCOPY_COMMAND% "%SOURCE_ROOT%\utils\mono-forward.h" "%TARGET_ROOT%\utils\" %OPTIONS%
+call :runCommand "%RUN%" %ARGUMENTS%
+
 SET RUN=%XCOPY_COMMAND% "%SOURCE_ROOT%\utils\mono-publib.h" "%TARGET_ROOT%\utils\" %OPTIONS%
 call :runCommand "%RUN%" %ARGUMENTS%
 

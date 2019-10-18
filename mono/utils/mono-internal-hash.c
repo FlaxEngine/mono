@@ -106,6 +106,33 @@ mono_internal_hash_table_insert (MonoInternalHashTable *table,
 	resize_if_needed (table);
 }
 
+void
+mono_internal_hash_table_foreach_remove(MonoInternalHashTable* table, MonoInternalHashRemoveFunc func, gpointer user_data)
+{
+	gpointer *bucket, *value;
+	gpointer *end = table->table + table->size;
+
+	// Check every table bucket
+	for (bucket = table->table; bucket != end; bucket++)
+	{
+		if (!bucket)
+			continue;
+
+		// Check all entries in the linked list
+		for (value = bucket; *value != NULL; value = table->next_value(*value))
+		{
+			if (func(table->key_extract(*value), *value, user_data))
+			{
+				*value = *(table->next_value(*value));
+				--table->num_entries;
+
+				if (*value == NULL)
+					break;
+			}
+		}
+	}
+}
+
 gboolean
 mono_internal_hash_table_remove (MonoInternalHashTable *table, gpointer key)
 {

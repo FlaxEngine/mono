@@ -25,6 +25,7 @@
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\cominterop.h" />
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\console-io.h" />
     <ClCompile Include="$(MonoSourceLocation)\mono\metadata\coree.c" />
+    <ClCompile Include="$(MonoSourceLocation)\mono\metadata\coree-windows-uwp.c" />
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\coree.h" />
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\coree-internals.h" />
     <ClInclude Include="$(MonoSourceLocation)\mono\metadata\culture-info.h" />
