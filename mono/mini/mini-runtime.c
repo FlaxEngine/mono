@@ -2540,7 +2540,7 @@ mono_jit_free_method (MonoDomain *domain, MonoMethod *method)
 	g_hash_table_remove (info->dynamic_code_hash, method);
 	mono_domain_jit_code_hash_lock (domain);
 	removed = mono_internal_hash_table_remove (&domain->jit_code_hash, method);
-	g_assert (removed);
+	//g_assert (removed);
 	mono_domain_jit_code_hash_unlock (domain);
 	g_hash_table_remove (info->jump_trampoline_hash, method);
 	g_hash_table_remove (info->seq_points, method);
@@ -4172,6 +4172,9 @@ static void
 cleanup_method_refs(gpointer key, gpointer value, gpointer user_data)
 {
 	MonoDomain *domain = (MonoDomain*)user_data;
+	MonoJitDynamicMethodInfo *ji;
+	GHashTableIter iter;
+	MonoJumpList *jlist;
 	MonoJitDomainInfo *info = domain_jit_info(domain);
 	MonoMethod *method = (MonoMethod*)value;
 
@@ -4183,6 +4186,8 @@ cleanup_method_refs(gpointer key, gpointer value, gpointer user_data)
 		mono_internal_hash_table_remove(&info->interp_code_hash, method);
 		mono_domain_jit_code_hash_unlock(domain);
 	}
+
+	ji = mono_dynamic_code_hash_lookup (domain, method);
 
 	if (info->seq_points)
 		g_hash_table_remove(info->seq_points, method);
@@ -4205,6 +4210,35 @@ cleanup_method_refs(gpointer key, gpointer value, gpointer user_data)
 	mono_domain_jit_code_hash_lock(domain);
 	mono_internal_hash_table_remove(&domain->jit_code_hash, method);
 	mono_domain_jit_code_hash_unlock(domain);
+
+	if (!ji)
+		return;
+
+	mono_debug_remove_method (method, domain);
+	mono_lldb_remove_method (domain, method, ji);
+
+	ji->ji->seq_points = NULL;
+
+	// Remove jump targets in this method
+	g_hash_table_iter_init (&iter, info->jump_target_hash);
+	while (g_hash_table_iter_next (&iter, NULL, (void**)&jlist)) {
+		GSList *tmp, *remove;
+		remove = NULL;
+		for (tmp = jlist->list; tmp; tmp = tmp->next) {
+			guint8 *ip = (guint8 *)tmp->data;
+			if (ip >= (guint8*)ji->ji->code_start && ip < (guint8*)ji->ji->code_start + ji->ji->code_size)
+				remove = g_slist_prepend (remove, tmp);
+		}
+		for (tmp = remove; tmp; tmp = tmp->next) {
+			jlist->list = g_slist_delete_link ((GSList *)jlist->list, (GSList *)tmp->data);
+		}
+		g_slist_free (remove);
+	}
+
+	// Cleanup dynamic method
+	mono_jit_info_table_remove (domain, ji->ji);
+	mono_code_manager_destroy (ji->code_mp);
+	g_free (ji);
 }
 
 static gboolean
@@ -4233,10 +4267,6 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 
 	MonoJitDomainInfo *info = domain_jit_info(domain);
 
-	//mono_domain_jit_code_hash_lock(domain);
-	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remove_jit_code_hash_from_assembly, assembly);
-	//mono_domain_jit_code_hash_unlock(domain);
-
 	// TODO: don't leak memory here - free seq points and other data when removing from hash tables
 
 	mono_image_lock(assembly->image);
@@ -4245,6 +4275,10 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		g_hash_table_foreach(assembly->image->method_cache, cleanup_method_refs, domain);
 
 	mono_image_unlock(assembly->image);
+	
+	//mono_domain_jit_code_hash_lock(domain);
+	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remove_jit_code_hash_from_assembly, assembly);
+	//mono_domain_jit_code_hash_unlock(domain);
 
 	mono_domain_lock(domain);
 
@@ -4258,6 +4292,8 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		g_hash_table_foreach_remove(info->dynamic_code_hash, remove_method_from_assembly, assembly);
 	if (info->jump_trampoline_hash)
 		g_hash_table_foreach_remove(info->jump_trampoline_hash, remove_method_from_assembly, assembly);
+	if (info->jit_trampoline_hash)
+		g_hash_table_foreach_remove(info->jit_trampoline_hash, remove_method_from_assembly, assembly);
 	if (info->method_code_hash)
 		g_hash_table_foreach_remove(info->method_code_hash, remove_method_from_assembly, assembly);
 	if (info->jump_target_got_slot_hash)
