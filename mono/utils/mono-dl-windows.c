@@ -177,7 +177,7 @@ mono_dl_current_error_string (void)
 int
 mono_dl_get_executable_path (char *buf, int buflen)
 {
-	return -1; //TODO
+	return GetModuleFileNameA(NULL, buf, buflen);
 }
 
 const char*
