@@ -1357,7 +1357,7 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 			void *iter;
 			char *mdirname;
 
-			for (j = 0; j < 3; ++j) {
+			for (j = 0; j < 4; ++j) {
 				iter = NULL;
 				mdirname = NULL;
 				switch (j) {
@@ -1420,6 +1420,22 @@ mono_lookup_pinvoke_call (MonoMethod *method, const char **exc_class, const char
 						break;
 					}
 #endif
+					case 3: /* @executable_path@ */
+					{
+						char buf [4096];
+						int binl;
+						binl = mono_dl_get_executable_path (buf, sizeof (buf));
+						if (binl != -1) {
+							char *resolvedname;
+							buf [binl] = 0;
+							resolvedname = mono_path_resolve_symlinks (buf);
+
+							mdirname = g_path_get_dirname (resolvedname);
+
+							g_free (resolvedname);
+						}
+						break;
+					}
 				}
 
 				if (!mdirname)
