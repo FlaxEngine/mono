@@ -3194,6 +3194,14 @@ mono_marshal_win_safearray_get_dim (gpointer safearray)
 {
 	return SafeArrayGetDim ((SAFEARRAY*)safearray);
 }
+#else
+static guint32
+mono_marshal_win_safearray_get_dim (gpointer safearray)
+{
+	g_unsupported_api ("SafeArrayGetDim");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return 0;
+}
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
 static guint32
@@ -3224,6 +3232,14 @@ mono_marshal_win_safe_array_get_lbound (gpointer psa, guint nDim, glong* plLboun
 {
 	return SafeArrayGetLBound ((SAFEARRAY*)psa, nDim, plLbound);
 }
+#else
+static int
+mono_marshal_win_safe_array_get_lbound (gpointer psa, guint nDim, glong* plLbound)
+{
+	g_unsupported_api ("SafeArrayGetDim");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return ERROR_NOT_SUPPORTED;
+}
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
 static int
@@ -3253,6 +3269,14 @@ static int
 mono_marshal_win_safe_array_get_ubound (gpointer psa, guint nDim, glong* plUbound)
 {
 	return SafeArrayGetUBound ((SAFEARRAY*)psa, nDim, plUbound);
+}
+#else
+static int
+mono_marshal_win_safe_array_get_ubound (gpointer psa, guint nDim, glong* plUbound)
+{
+	g_unsupported_api ("SafeArrayGetUBound");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return ERROR_NOT_SUPPORTED;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
@@ -3363,6 +3387,14 @@ mono_marshal_win_safearray_get_value (gpointer safearray, gpointer indices, gpoi
 {
 	return SafeArrayPtrOfIndex ((SAFEARRAY*)safearray, (LONG*)indices, result);
 }
+#else
+static int
+mono_marshal_win_safearray_get_value (gpointer safearray, gpointer indices, gpointer *result)
+{
+	g_unsupported_api ("SafeArrayPtrOfIndex");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return ERROR_NOT_SUPPORTED;
+}
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
 static gpointer
@@ -3452,6 +3484,14 @@ mono_marshal_win_safearray_end (gpointer safearray, gpointer indices)
 	g_free(indices);
 	SafeArrayDestroy ((SAFEARRAY*)safearray);
 }
+#else
+static void
+mono_marshal_win_safearray_end (gpointer safearray, gpointer indices)
+{
+	g_free(indices);
+	g_unsupported_api ("SafeArrayDestroy");
+	SetLastError (ERROR_NOT_SUPPORTED);
+}
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
 static void
@@ -3481,6 +3521,15 @@ mono_marshal_win_safearray_create_internal (UINT cDims, SAFEARRAYBOUND *rgsaboun
 {
 	*newsafearray = SafeArrayCreate (VT_VARIANT, cDims, rgsabound);
 	return TRUE;
+}
+#else
+static gboolean
+mono_marshal_win_safearray_create_internal (UINT cDims, SAFEARRAYBOUND *rgsabound, gpointer *newsafearray)
+{
+	*newsafearray = 0;
+	g_unsupported_api ("SafeArrayCreate");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return FALSE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 
@@ -3543,6 +3592,14 @@ static int
 mono_marshal_win_safearray_set_value (gpointer safearray, gpointer indices, gpointer value)
 {
 	return SafeArrayPutElement ((SAFEARRAY*)safearray, (LONG*)indices, value);
+}
+#else
+static int
+mono_marshal_win_safearray_set_value (gpointer safearray, gpointer indices, gpointer value)
+{
+	g_unsupported_api ("SafeArrayPutElement");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return ERROR_NOT_SUPPORTED;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
 

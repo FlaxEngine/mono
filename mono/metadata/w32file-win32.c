@@ -52,7 +52,7 @@ void ves_icall_System_IO_MonoIO_DumpHandles (void)
 	return;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 
 gpointer
 mono_w32file_create(const gunichar2 *name, guint32 fileaccess, guint32 sharemode, guint32 createmode, guint32 attrs)
@@ -394,7 +394,7 @@ mono_w32file_get_drive_type(const gunichar2 *root_path_name)
 	return res;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 
 gboolean
 mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
@@ -413,7 +413,7 @@ mono_w32file_move (const gunichar2 *path, const gunichar2 *dest, gint32 *error)
 }
 #endif
 
-#if HAVE_API_SUPPORT_WIN32_REPLACE_FILE
+#if HAVE_API_SUPPORT_WIN32_REPLACE_FILE | HAVE_GAMES_WINAPI_SUPPORT
 gboolean
 mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sourceFileName, const gunichar2 *destinationBackupFileName, guint32 flags, gint32 *error)
 {
@@ -431,7 +431,7 @@ mono_w32file_replace (const gunichar2 *destinationFileName, const gunichar2 *sou
 }
 #endif
 
-#if HAVE_API_SUPPORT_WIN32_COPY_FILE
+#if HAVE_API_SUPPORT_WIN32_COPY_FILE | HAVE_GAMES_WINAPI_SUPPORT
 // Support older UWP SDK?
 WINBASEAPI
 BOOL
@@ -459,7 +459,7 @@ mono_w32file_copy (const gunichar2 *path, const gunichar2 *dest, gboolean overwr
 }
 #endif
 
-#if HAVE_API_SUPPORT_WIN32_LOCK_FILE
+#if HAVE_API_SUPPORT_WIN32_LOCK_FILE | HAVE_GAMES_WINAPI_SUPPORT
 gboolean
 mono_w32file_lock (gpointer handle, gint64 position, gint64 length, gint32 *error)
 {
@@ -477,7 +477,7 @@ mono_w32file_lock (gpointer handle, gint64 position, gint64 length, gint32 *erro
 }
 #endif
 
-#if HAVE_API_SUPPORT_WIN32_UNLOCK_FILE
+#if HAVE_API_SUPPORT_WIN32_UNLOCK_FILE | HAVE_GAMES_WINAPI_SUPPORT
 gboolean
 mono_w32file_unlock (gpointer handle, gint64 position, gint64 length, gint32 *error)
 {
@@ -495,7 +495,7 @@ mono_w32file_unlock (gpointer handle, gint64 position, gint64 length, gint32 *er
 }
 #endif
 
-#if HAVE_API_SUPPORT_WIN32_GET_STD_HANDLE
+#if HAVE_API_SUPPORT_WIN32_GET_STD_HANDLE | HAVE_GAMES_WINAPI_SUPPORT
 HANDLE
 mono_w32file_get_console_input (void)
 {
@@ -563,5 +563,20 @@ mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
 	MONO_EXIT_GC_SAFE;
 	return res;
 }
+#else
+gint32
+mono_w32file_get_logical_drive (guint32 len, gunichar2 *buf)
+{
+	MonoError mono_error;
+	error_init(&mono_error);
 
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+	g_unsupported_api("GetLogicalDriveStrings (len, buf)");
+
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetLogicalDriveStrings (len, buf)");
+	mono_error_set_pending_exception(&mono_error);
+
+	SetLastError(ERROR_NOT_SUPPORTED);
+
+	return (gint32)INVALID_HANDLE_VALUE;
+}
+#endif

@@ -53,7 +53,7 @@ mono_w32process_signal_finished (void)
 {
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 HANDLE
 ves_icall_System_Diagnostics_Process_GetProcess_internal (guint32 pid)
 {
@@ -68,7 +68,7 @@ ves_icall_System_Diagnostics_Process_GetProcess_internal (guint32 pid)
 		return NULL;
 	return handle;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 MonoBoolean
@@ -167,6 +167,58 @@ mono_process_create_process (MonoCreateProcessCoop *coop, MonoW32ProcessInfo *mo
 	return result;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+MonoBoolean
+ves_icall_System_Diagnostics_Process_ShellExecuteEx_internal (MonoW32ProcessStartInfoHandle proc_start_info, MonoW32ProcessInfo *process_info, MonoError *error)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+
+	g_unsupported_api ("ShellExecuteEx");
+
+	mono_error_set_not_supported (&mono_error, G_UNSUPPORTED_API, "ShellExecuteEx");
+	mono_error_set_pending_exception (&mono_error);
+
+	process_info->pid = (guint32)(-ERROR_NOT_SUPPORTED);
+	SetLastError (ERROR_NOT_SUPPORTED);
+
+	return FALSE;
+}
+
+static inline void
+mono_process_init_startup_info (HANDLE stdin_handle, HANDLE stdout_handle, HANDLE stderr_handle, STARTUPINFO *startinfo)
+{
+	startinfo->cb = sizeof(STARTUPINFO);
+	startinfo->dwFlags = 0;
+	startinfo->hStdInput = stdin_handle;
+	startinfo->hStdOutput = stdout_handle;
+	startinfo->hStdError = stderr_handle;
+	return;
+}
+
+static gboolean
+mono_process_create_process (MonoCreateProcessCoop *coop, MonoW32ProcessInfo *mono_process_info,
+	MonoStringHandle cmd, guint32 creation_flags, gunichar2 *env_vars, gunichar2 *dir, STARTUPINFO *start_info,
+	PROCESS_INFORMATION *process_info)
+{
+	gboolean result = FALSE;
+	gchandle_t cmd_gchandle = 0;
+	gunichar2 *cmd_chars = MONO_HANDLE_IS_NULL (cmd) ? NULL : mono_string_handle_pin_chars (cmd, &cmd_gchandle);
+	result = CreateProcessW (NULL,
+				cmd_chars,
+				NULL,
+				NULL,
+				TRUE,
+				creation_flags,
+				env_vars,
+				dir,
+				start_info,
+				process_info);
+	mono_gchandle_free (cmd_gchandle);
+	return result;
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 static gchar*
 process_unquote_application_name (gchar *appname)
@@ -354,13 +406,13 @@ exit:
 	return ret;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 static inline gboolean
 mono_process_win_enum_processes (DWORD *pids, DWORD count, DWORD *needed)
 {
 	return !!EnumProcesses (pids, count, needed);
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 MonoArray *
 ves_icall_System_Diagnostics_Process_GetProcesses_internal (void)
@@ -425,6 +477,20 @@ mono_icall_get_process_working_set_size (gpointer handle, gsize *min, gsize *max
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+static inline MonoBoolean
+mono_icall_get_process_working_set_size (gpointer handle, gsize *min, gsize *max)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+	g_unsupported_api ("GetProcessWorkingSetSize");
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetProcessWorkingSetSize");
+	mono_error_set_pending_exception (&mono_error);
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return FALSE;
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
 MonoBoolean
 ves_icall_Microsoft_Win32_NativeMethods_GetProcessWorkingSetSize (gpointer handle, gsize *min, gsize *max, MonoError *error)
 {
@@ -436,6 +502,20 @@ static inline MonoBoolean
 mono_icall_set_process_working_set_size (gpointer handle, gsize min, gsize max)
 {
 	return SetProcessWorkingSetSize (handle, min, max);
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+static inline MonoBoolean
+mono_icall_set_process_working_set_size (gpointer handle, gsize min, gsize max)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+	g_unsupported_api ("SetProcessWorkingSetSize");
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "SetProcessWorkingSetSize");
+	mono_error_set_pending_exception (&mono_error);
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return FALSE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
@@ -453,6 +533,20 @@ mono_icall_get_priority_class (gpointer handle)
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+static inline gint32
+mono_icall_get_priority_class (gpointer handle)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+	g_unsupported_api ("GetPriorityClass");
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetPriorityClass");
+	mono_error_set_pending_exception (&mono_error);
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return FALSE;
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
 gint32
 ves_icall_Microsoft_Win32_NativeMethods_GetPriorityClass (gpointer handle, MonoError *error)
 {
@@ -464,6 +558,20 @@ static inline MonoBoolean
 mono_icall_set_priority_class (gpointer handle, gint32 priorityClass)
 {
 	return SetPriorityClass (handle, (guint32) priorityClass);
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+static inline MonoBoolean
+mono_icall_set_priority_class (gpointer handle, gint32 priorityClass)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+	g_unsupported_api ("SetPriorityClass");
+	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "SetPriorityClass");
+	mono_error_set_pending_exception (&mono_error);
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return FALSE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 

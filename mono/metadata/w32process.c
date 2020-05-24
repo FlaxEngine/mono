@@ -95,6 +95,51 @@ mono_w32process_ver_language_name (guint32 lang, gunichar2 *lang_out, guint32 la
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && defined(HOST_WIN32) */
 
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) && defined(HOST_WIN32)
+
+static guint32
+mono_w32process_get_pid (gpointer handle)
+{
+	return GetProcessId (handle);
+}
+
+static gboolean
+mono_w32process_try_get_modules (gpointer process, HMODULE *modules, guint32 size, PDWORD needed)
+{
+	return EnumProcessModules (process, modules, size, needed);
+}
+
+static guint32
+mono_w32process_module_get_name (gpointer process, gpointer module, gunichar2 *basename, guint32 size)
+{
+	return GetModuleBaseName (process, (HMODULE)module, basename, size);
+}
+
+static guint32
+mono_w32process_module_get_filename (gpointer process, gpointer module, gunichar2 *basename, guint32 size)
+{
+	return GetModuleFileNameEx (process, (HMODULE)module, basename, size);
+}
+
+static gboolean
+mono_w32process_module_get_information (gpointer process, gpointer module, MODULEINFO *modinfo, guint32 size)
+{
+	return GetModuleInformation (process, (HMODULE)module, modinfo, size);
+}
+
+static gboolean
+mono_w32process_get_fileversion_info (const gunichar2 *filename, gpointer *data)
+{
+	return FALSE;
+}
+
+static void
+mono_w32process_get_fileversion (MonoObject *filever, gunichar2 *filename, MonoError *error)
+{
+}
+
+#endif /* G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) && defined(HOST_WIN32) */
+
 static MonoImage *system_image;
 
 static void
@@ -639,7 +684,25 @@ ves_icall_System_Diagnostics_Process_GetModules_internal (MonoObject *this_obj, 
 
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+MonoArray *
+ves_icall_System_Diagnostics_Process_GetModules_internal (MonoObject *this_obj, HANDLE process)
+{
+	ERROR_DECL_VALUE (mono_error);
+	error_init (&mono_error);
+
+	g_unsupported_api ("EnumProcessModules, GetModuleBaseName, GetModuleFileNameEx");
+
+	mono_error_set_not_supported (&mono_error, G_UNSUPPORTED_API, "EnumProcessModules, GetModuleBaseName, GetModuleFileNameEx");
+	mono_error_set_pending_exception (&mono_error);
+
+	SetLastError (ERROR_NOT_SUPPORTED);
+
+	return NULL;
+}
+#endif /* G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
+	
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 
 MonoString *
 ves_icall_System_Diagnostics_Process_ProcessName_internal (HANDLE process)
@@ -667,7 +730,7 @@ ves_icall_System_Diagnostics_Process_ProcessName_internal (HANDLE process)
 	return string;
 }
 
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 
 gint64
 ves_icall_System_Diagnostics_Process_GetProcessData (int pid, gint32 data_type, gint32 *error)

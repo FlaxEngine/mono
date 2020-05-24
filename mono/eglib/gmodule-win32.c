@@ -42,7 +42,7 @@ struct _GModule {
 	int main_module;
 };
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 
 GModule *
 g_module_open (const gchar *file, GModuleFlags flags)
@@ -117,7 +117,7 @@ w32_find_symbol (const gchar *symbol_name)
 	g_free (modules);
 	return NULL;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 gboolean
 g_module_symbol (GModule *module, const gchar *symbol_name, gpointer *symbol)

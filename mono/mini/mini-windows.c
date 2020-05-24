@@ -73,7 +73,7 @@ typedef struct {
 	handler handler;
 } HandlerItem;
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 /**
 * atexit_wait_keypress:
 *
@@ -120,7 +120,7 @@ install_atexit_wait_keypress (void)
 	return;
 }
 
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 
 // Table describing handlers that can be installed at process startup. Adding a new handler can be done by adding a new item to the table together with an install handler function.
 const HandlerItem g_handler_items[] = { { MONO_HANDLER_ATEXIT_WAIT_KEYPRESS, MONO_HANDLER_ATEXIT_WAIT_KEYPRESS_LEN, install_atexit_wait_keypress },
@@ -228,13 +228,13 @@ mono_runtime_install_custom_handlers_usage (void)
 		 "   --handlers=HANDLERS            Enable handler support, HANDLERS is a comma\n"
 		 "                                  separated list of available handlers to install.\n"
 		 "\n"
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 		 "HANDLERS is composed of:\n"
 		 "    atexit-waitkeypress           Install an atexit handler waiting for a keypress\n"
 		 "                                  before exiting process.\n");
 #else
 		 "No handlers supported on current platform.\n");
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 }
 
 void
@@ -251,7 +251,7 @@ mono_init_native_crash_info (void)
 	return;
 }
 
-#if G_HAVE_API_SUPPORT (HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 /* mono_chain_signal:
  *
  *   Call the original signal handler for the signal given by the arguments, which
@@ -280,7 +280,7 @@ mono_post_native_crash_handler (const char *signal, void *ctx, MONO_SIG_HANDLER_
 		abort ();
 }
 #endif /* !MONO_CROSS_COMPILE */
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 
 #if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 static MMRESULT	g_timer_event = 0;
@@ -393,6 +393,31 @@ mono_setup_thread_context(DWORD thread_id, MonoContext *mono_context)
 	return TRUE;
 }
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+
+#if G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+
+void
+mono_runtime_setup_stat_profiler (void)
+{
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return;
+}
+
+void
+mono_runtime_shutdown_stat_profiler (void)
+{
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return;
+}
+
+gboolean
+mono_setup_thread_context(DWORD thread_id, MonoContext *mono_context)
+{
+	memset (mono_context, 0, sizeof (MonoContext));
+	return FALSE;
+}
+
+#endif /* G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 gboolean
 mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoThreadInfo *info, void *sigctx)

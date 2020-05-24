@@ -329,17 +329,18 @@ mono_mmap_configure_inheritability (void *mmap_handle, gboolean inheritability, 
 {
 	g_assert (mmap_handle);
 #if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
-	g_unsupported_api("SetHandleInformation");
-#else
 	if (!SetHandleInformation ((HANDLE) mmap_handle, HANDLE_FLAG_INHERIT, inheritability ? HANDLE_FLAG_INHERIT : 0)) {
 		g_error ("mono_mmap_configure_inheritability: SetHandleInformation failed with error %d!", GetLastError ());
 	}
+#else
+	g_unsupported_api("SetHandleInformation");
 #endif
 }
 
 void
 mono_mmap_flush (void *mmap_handle, MonoError *error)
 {
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
 	g_assert (mmap_handle);
 	MmapInstance *h = (MmapInstance *)mmap_handle;
 
@@ -377,6 +378,7 @@ mono_mmap_flush (void *mmap_handle, MonoError *error)
 
 	// We got to here, so there was no success:
 	// TODO: Propagate error to caller
+#endif
 }
 
 int

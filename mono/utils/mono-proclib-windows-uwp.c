@@ -9,7 +9,7 @@
 #include <glib.h>
 #include "mono/utils/mono-compiler.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 #include <windows.h>
 #include <mono/utils/mono-proclib.h>
 

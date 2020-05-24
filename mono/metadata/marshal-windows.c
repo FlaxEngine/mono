@@ -14,7 +14,7 @@
 #include <objbase.h>
 #include "mono/metadata/marshal-windows-internals.h"
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 void*
 mono_marshal_alloc_hglobal (size_t size)
 {
@@ -32,7 +32,7 @@ mono_marshal_free_hglobal (gpointer ptr)
 {
 	GlobalFree (ptr);
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT) */
 
 void*
 mono_marshal_alloc_co_task_mem (size_t size)

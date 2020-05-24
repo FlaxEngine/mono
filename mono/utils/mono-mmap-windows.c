@@ -20,7 +20,7 @@
 
 static void *malloced_shared_area;
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 #define VIRTUAL_ALLOC_IMPL(addr, length, mflags, prot) VirtualAlloc (addr, length, mflags, prot)
 #define VIRTUAL_FREE_IMPL(addr, length, mflags) VirtualFree (addr, length, mflags)
 #define VIRTUAL_PROTECT_IMPL(addr, length, prot, oldprot) VirtualProtect (addr, length, prot, oldprot)
@@ -167,7 +167,7 @@ mono_file_map_error (size_t length, int flags, int fd, guint64 offset, void **re
 	HANDLE const file = (HANDLE)_get_osfhandle (fd);
 	const char *failed_function = NULL;
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 
 	failed_function = "CreateFileMapping";
 	mapping = CreateFileMappingW (file, NULL, prot, (DWORD)(length >> 31 >> 1), (DWORD)length, NULL);

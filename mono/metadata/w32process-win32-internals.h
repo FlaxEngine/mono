@@ -16,7 +16,7 @@
 // On platforms not using classic WIN API support the  implementation of bellow methods are hosted in separate source file
 // process-windows-*.c. On platforms using classic WIN API the implementation is still keept in process.c and still declared
 // static and in some places even inlined.
-#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 
 #include <winnt.h>
 
@@ -75,7 +75,7 @@ typedef STARTUPINFOA STARTUPINFO;
 typedef LPSTARTUPINFOA LPSTARTUPINFO;
 #endif // UNICODE
 
-#endif /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) && !G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)) */
 
 #if !G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
 void

@@ -96,7 +96,7 @@ g_unsetenv(const gchar *variable)
 	g_free(var);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 gchar*
 g_win32_getlocale(void)
 {

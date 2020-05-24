@@ -7130,7 +7130,7 @@ ves_icall_System_Environment_GetWindowsFolderPath (int folder, MonoError *error)
 	return mono_icall_get_windows_folder_path (folder, error);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 static MonoArray *
 mono_icall_get_logical_drives (void)
 {
@@ -7542,13 +7542,13 @@ ves_icall_System_IO_DriveInfo_GetDiskFreeSpace (MonoString *path_name, guint64 *
 	return result;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 static inline guint32
 mono_icall_drive_info_get_drive_type (MonoString *root_path_name)
 {
 	return mono_w32file_get_drive_type (mono_string_chars (root_path_name));
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 ICALL_EXPORT guint32
 ves_icall_System_IO_DriveInfo_GetDriveType (MonoString *root_path_name)

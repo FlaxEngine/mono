@@ -71,6 +71,22 @@ mono_dl_open_file (const char *file, int flags)
 	return hModule;
 }
 
+#elif G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+
+void*
+mono_dl_open_file (const char *file, int flags)
+{
+	gpointer hModule = NULL;
+	if (file) {
+		gunichar2* file_utf16 = g_utf8_to_utf16 (file, strlen (file), NULL, NULL, NULL);
+		hModule = LoadLibrary (file_utf16);
+		g_free (file_utf16);
+	} else {
+		hModule = GetModuleHandle (NULL);
+	}
+	return hModule;
+}
+
 #endif
 
 void
@@ -80,7 +96,7 @@ mono_dl_close_handle (MonoDl *module)
 		FreeLibrary ((HMODULE)module->handle);
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 void*
 mono_dl_lookup_symbol_in_process (const char *symbol_name)
 {
@@ -128,7 +144,7 @@ mono_dl_lookup_symbol_in_process (const char *symbol_name)
 	g_free (modules);
 	return NULL;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 void*
 mono_dl_lookup_symbol (MonoDl *module, const char *symbol_name)
@@ -154,7 +170,7 @@ mono_dl_convert_flags (int flags)
 	return 0;
 }
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
 char*
 mono_dl_current_error_string (void)
 {
@@ -172,7 +188,7 @@ mono_dl_current_error_string (void)
 	}
 	return ret;
 }
-#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
+#endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) || G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT) */
 
 int
 mono_dl_get_executable_path (char *buf, int buflen)

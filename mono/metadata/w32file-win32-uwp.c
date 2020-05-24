@@ -90,22 +90,6 @@ mono_w32file_get_console_error (void)
 	return INVALID_HANDLE_VALUE;
 }
 
-gint32
-mono_w32file_get_logical_drive(guint32 len, gunichar2 *buf)
-{
-	MonoError mono_error;
-	error_init(&mono_error);
-
-	g_unsupported_api("GetLogicalDriveStrings (len, buf)");
-
-	mono_error_set_not_supported(&mono_error, G_UNSUPPORTED_API, "GetLogicalDriveStrings (len, buf)");
-	mono_error_set_pending_exception(&mono_error);
-
-	SetLastError(ERROR_NOT_SUPPORTED);
-
-	return (gint32)INVALID_HANDLE_VALUE;
-}
-
 #else /* G_HAVE_API_SUPPORT(HAVE_UWP_WINAPI_SUPPORT) */
 
 MONO_EMPTY_SOURCE_FILE (file_io_windows_uwp);

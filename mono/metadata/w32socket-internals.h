@@ -84,7 +84,7 @@ mono_w32socket_sendto (SOCKET s, const char *buf, int len, int flags, const stru
 int
 mono_w32socket_sendbuffers (SOCKET s, LPWSABUF lpBuffers, guint32 dwBufferCount, guint32 *lpNumberOfBytesRecvd, guint32 lpFlags, gpointer lpOverlapped, gpointer lpCompletionRoutine, gboolean blocking);
 
-#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT | HAVE_GAMES_WINAPI_SUPPORT)
 
 BOOL
 mono_w32socket_transmit_file (SOCKET hSocket, gpointer hFile, LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers, guint32 dwReserved, gboolean blocking);

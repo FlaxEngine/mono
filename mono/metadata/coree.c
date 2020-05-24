@@ -918,6 +918,14 @@ mono_coree_set_act_ctx (const char* file_name)
 	if (handle != INVALID_HANDLE_VALUE)
 		ActivateActCtx_proc (handle, &cookie);
 }
+#elif G_HAVE_API_SUPPORT(HAVE_GAMES_WINAPI_SUPPORT)
+void
+mono_coree_set_act_ctx (const char *file_name)
+{
+	g_unsupported_api ("CreateActCtx, ActivateActCtx");
+	SetLastError (ERROR_NOT_SUPPORTED);
+	return;
+}
 #endif /* G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT) */
 
 void
