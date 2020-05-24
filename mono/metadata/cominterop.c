@@ -2816,7 +2816,19 @@ mono_ptr_to_bstr (const gunichar2* ptr, int slen)
 	if (!ptr)
 		return NULL;
 #ifdef HOST_WIN32
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
 	return SysAllocStringLen (ptr, slen);
+#else
+	/* allocate len + 1 utf16 characters plus 4 byte integer for length*/
+	guint32 * const ret = (guint32 *)g_malloc ((slen + 1) * sizeof (gunichar2) + sizeof (guint32));
+	if (ret == NULL)
+		return NULL;
+	mono_bstr const s = (mono_bstr)(ret + 1);
+	*ret = slen * sizeof (gunichar2);
+	memcpy (s, ptr, slen * sizeof (gunichar2));
+	s [slen] = 0;
+	return s;
+#endif
 #else
 #ifndef DISABLE_COM
 	if (com_provider == MONO_COM_DEFAULT) {
@@ -2852,7 +2864,11 @@ mono_string_from_bstr_checked (mono_bstr_const bstr, MonoError *error)
 	if (!bstr)
 		return NULL_HANDLE_STRING;
 #ifdef HOST_WIN32
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
 	return mono_string_new_utf16_handle (mono_domain_get (), bstr, SysStringLen ((BSTR)bstr), error);
+#else
+	return mono_string_new_utf16_handle (mono_domain_get (), bstr, *((guint32 *)bstr - 1) / sizeof (gunichar2), error);
+#endif
 #else
 #ifndef DISABLE_COM
 	if (com_provider == MONO_COM_DEFAULT)
@@ -2904,7 +2920,11 @@ mono_free_bstr (/*mono_bstr_const*/gpointer bstr)
 	if (!bstr)
 		return;
 #ifdef HOST_WIN32
+#if G_HAVE_API_SUPPORT(HAVE_CLASSIC_WINAPI_SUPPORT | HAVE_UWP_WINAPI_SUPPORT)
 	SysFreeString ((BSTR)bstr);
+#else
+	g_free (((char *)bstr) - 4);
+#endif
 #else
 #ifndef DISABLE_COM
 	if (com_provider == MONO_COM_DEFAULT) {
