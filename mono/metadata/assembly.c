@@ -4511,8 +4511,15 @@ mono_assembly_close_except_image_pools (MonoAssembly *assembly)
 #if defined(HAVE_SGEN_GC)
 		mono_gc_finalize_assembly (assembly);
 #endif
-		mono_gc_invoke_finalizers ();
-
+		if (mono_gc_pending_finalizers()) {
+	        mono_gc_finalize_notify();
+	        do
+	        {
+#ifdef HOST_WIN32
+				Sleep (1);
+#endif
+			} while (mono_gc_pending_finalizers());
+	    }
 		mono_gc_clear_assembly(assembly);
 	}
 
