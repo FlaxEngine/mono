@@ -4265,23 +4265,29 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 	if (!domain || !domain->domain || mono_domain_is_unloading(domain) || mono_runtime_is_shutting_down())
 		return;
 
-	MonoJitDomainInfo *info = domain_jit_info(domain);
-
 	// TODO: don't leak memory here - free seq points and other data when removing from hash tables
 
 	mono_image_lock(assembly->image);
-	
+
 	if (assembly->image->method_cache)
 		g_hash_table_foreach(assembly->image->method_cache, cleanup_method_refs, domain);
 
 	mono_image_unlock(assembly->image);
-	
+
 	//mono_domain_jit_code_hash_lock(domain);
 	//mono_internal_hash_table_foreach_remove(&domain->jit_code_hash, remove_jit_code_hash_from_assembly, assembly);
 	//mono_domain_jit_code_hash_unlock(domain);
 
 	mono_domain_lock(domain);
 
+	// Hardcore reload -> reset whole JIT info
+	mini_free_jit_domain_info(domain);
+	mini_create_jit_domain_info(domain);
+
+	mono_trampolines_cleanup(assembly->image);
+
+	/*
+	MonoJitDomainInfo *info = domain_jit_info(domain);
 	if (info->jump_target_hash)
 		g_hash_table_foreach_remove(info->jump_target_hash, remove_method_from_assembly, assembly);
 	if (info->seq_points)
@@ -4298,7 +4304,6 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		g_hash_table_foreach_remove(info->method_code_hash, remove_method_from_assembly, assembly);
 	if (info->jump_target_got_slot_hash)
 		g_hash_table_foreach_remove(info->jump_target_got_slot_hash, remove_method_from_assembly, assembly);
-
 	if (info->runtime_invoke_hash)
 	{
 		struct AssemblyClearData data;
@@ -4306,19 +4311,19 @@ mono_domain_fire_assembly_unload(MonoAssembly *assembly, gpointer user_data)
 		data.assembly = assembly;
 		mono_conc_hashtable_foreach(info->runtime_invoke_hash, remove_conc_method_from_assembly, &data);
 	}
-
 	// TODO: ugly hack - delete all previously compiled methods
 	g_hash_table_destroy(info->jit_trampoline_hash);
 	info->jit_trampoline_hash = g_hash_table_new(mono_aligned_addr_hash, NULL);
-	mono_internal_hash_table_destroy(&(domain->jit_code_hash));
-	mono_jit_code_hash_init(&(domain->jit_code_hash));
 
 	// TODO: don't leak trampolines and method+klass pairs?
-	
 	g_hash_table_foreach_remove(info->delegate_trampoline_hash, remove_delegate_trampoline_hash_from_assembly, assembly);
-	
 	//g_hash_table_destroy(info->delegate_trampoline_hash);
 	//info->delegate_trampoline_hash = g_hash_table_new(class_method_pair_hash, class_method_pair_equal);
+	*/
+
+	// Ugly hack - delete all previously compiled methods
+	mono_internal_hash_table_destroy (&(domain->jit_code_hash));
+	mono_jit_code_hash_init (&(domain->jit_code_hash));
 
 	mono_domain_unlock(domain);
 }
@@ -5129,7 +5134,7 @@ mini_cleanup (MonoDomain *domain)
 
 	mono_aot_cleanup ();
 
-	mono_trampolines_cleanup ();
+	mono_trampolines_cleanup (NULL);
 
 	mono_unwind_cleanup ();
 

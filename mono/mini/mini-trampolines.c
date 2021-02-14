@@ -1415,11 +1415,14 @@ mono_trampolines_init (void)
 }
 
 void
-mono_trampolines_cleanup (void)
+mono_trampolines_cleanup (MonoImage *image)
 {
 	g_hash_table_destroy (rgctx_lazy_fetch_trampoline_hash);
+	rgctx_lazy_fetch_trampoline_hash = NULL;
 	g_hash_table_destroy (rgctx_lazy_fetch_trampoline_hash_addr);
-	mono_os_mutex_destroy (&trampolines_mutex);
+	rgctx_lazy_fetch_trampoline_hash_addr = NULL;
+	if (!image)
+		mono_os_mutex_destroy (&trampolines_mutex);
 }
 
 guint8 *

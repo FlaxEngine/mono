@@ -2101,7 +2101,7 @@ mini_register_opcode_emulation (int opcode, const char *name, const char *sigstr
 #endif // __cplusplus
 
 void              mono_trampolines_init (void);
-void              mono_trampolines_cleanup (void);
+void              mono_trampolines_cleanup (MonoImage *image);
 guint8 *          mono_get_trampoline_code (MonoTrampolineType tramp_type);
 gpointer          mono_create_specific_trampoline (gpointer arg1, MonoTrampolineType tramp_type, MonoDomain *domain, guint32 *code_len);
 gpointer          mono_create_jump_trampoline (MonoDomain *domain, 

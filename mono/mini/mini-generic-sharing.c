@@ -2404,7 +2404,7 @@ register_info (MonoClass *klass, int type_argc, gpointer data, MonoRgctxInfoType
 			break;
 	}
 
-	DEBUG (printf ("set slot %s, infos [%d] = %s, %s\n", mono_type_get_full_name (class), i, mono_rgctx_info_type_to_str (info_type), rgctx_info_to_str (info_type, data)));
+	DEBUG (printf ("set slot %s, infos [%d] = %s, %s\n", mono_type_get_full_name (klass), i, mono_rgctx_info_type_to_str (info_type), rgctx_info_to_str (info_type, data)));
 
 	/* Mark the slot as used in all parent classes (until we find
 	   a parent class which already has it marked used). */
